@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PGTU Roma - Mappa Interattiva</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { width: 100%; height: 100%; }
+
+        /* Control panel */
+        .control-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+            padding: 16px;
+            max-width: 320px;
+            min-width: 260px;
+            max-height: calc(100vh - 30px);
+            overflow-y: auto;
+        }
+        .control-panel h2 {
+            font-size: 15px;
+            margin-bottom: 12px;
+            color: #333;
+            border-bottom: 2px solid #0079ff;
+            padding-bottom: 6px;
+        }
+        .control-section {
+            margin-bottom: 14px;
+        }
+        .control-section h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            padding: 5px 0;
+            cursor: pointer;
+        }
+        .layer-toggle input[type="checkbox"] {
+            margin-right: 8px;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .layer-toggle label {
+            font-size: 13px;
+            color: #333;
+            cursor: pointer;
+            flex: 1;
+        }
+        .color-swatch {
+            display: inline-block;
+            width: 20px;
+            height: 4px;
+            margin-right: 6px;
+            vertical-align: middle;
+            border-radius: 2px;
+        }
+
+        /* Municipi selector */
+        #municipio-select {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 13px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+        }
+        #municipio-select:focus {
+            outline: none;
+            border-color: #0079ff;
+            box-shadow: 0 0 0 2px rgba(0,121,255,0.2);
+        }
+
+        /* Legend sections */
+        .legend-item {
+            display: flex;
+            align-items: center;
+            padding: 2px 0;
+            font-size: 12px;
+            color: #555;
+        }
+        .legend-line {
+            width: 24px;
+            height: 3px;
+            margin-right: 6px;
+            border-radius: 1px;
+            flex-shrink: 0;
+        }
+        .legend-block {
+            margin-top: 4px;
+            padding-left: 4px;
+        }
+
+        /* Info popup */
+        .leaflet-popup-content {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .leaflet-popup-content strong {
+            color: #333;
+        }
+
+        /* Loading overlay */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.92);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        #loading .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e0e0e0;
+            border-top-color: #0079ff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading p { color: #555; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Caricamento dati mappa...</p>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="control-panel">
+        <h2>PGTU Roma</h2>
+
+        <!-- Municipi selector -->
+        <div class="control-section">
+            <h3>Municipi</h3>
+            <select id="municipio-select">
+                <option value="">Tutti i Municipi</option>
+            </select>
+        </div>
+
+        <!-- Layer toggles -->
+        <div class="control-section">
+            <h3>Rete Stradale Principale</h3>
+            <div class="layer-toggle">
+                <input type="checkbox" id="toggle-pgtu" checked>
+                <label for="toggle-pgtu">PGTU - Annesso D</label>
+            </div>
+            <div class="legend-block" id="legend-pgtu">
+                <div class="legend-item"><span class="legend-line" style="background:#000"></span> Autostrade (A)</div>
+                <div class="legend-item"><span class="legend-line" style="background:#007bff"></span> Scorrimento (S)</div>
+                <div class="legend-item"><span class="legend-line" style="background:#27f1ff"></span> Interquartiere (IQ)</div>
+                <div class="legend-item"><span class="legend-line" style="background:#ff9400"></span> Quartiere (Q)</div>
+                <div class="legend-item"><span class="legend-line" style="background:#e4ff00"></span> Interzonali (IZ)</div>
+            </div>
+        </div>
+
+        <div class="control-section">
+            <h3>Analisi Flussi di Traffico</h3>
+            <div class="layer-toggle">
+                <input type="checkbox" id="toggle-low-traffic" checked>
+                <label for="toggle-low-traffic">Flussi Bassi (Rete Principale)</label>
+            </div>
+            <div class="legend-block" id="legend-low">
+                <div class="legend-item"><span class="legend-line" style="background:rgb(0,138,10)"></span> 101 - 2,200</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(64,167,72)"></span> 2,200 - 4,159</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(128,197,133)"></span> 4,159 - 6,814</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(191,226,194)"></span> 6,814 - 15,638</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(220,220,220)"></span> 15,638 - 57,833</div>
+            </div>
+
+            <div class="layer-toggle" style="margin-top: 8px;">
+                <input type="checkbox" id="toggle-high-traffic" checked>
+                <label for="toggle-high-traffic">Flussi Elevati (Fuori Rete)</label>
+            </div>
+            <div class="legend-block" id="legend-high">
+                <div class="legend-item"><span class="legend-line" style="background:rgb(255,90,90)"></span> 5,002 - 5,822</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(239,78,77)"></span> 5,822 - 6,837</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(222,65,64)"></span> 6,837 - 7,784</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(206,52,52)"></span> 7,784 - 8,970</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(189,40,39)"></span> 8,970 - 10,982</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(173,27,26)"></span> 10,982 - 14,485</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(156,15,13)"></span> 14,485 - 22,268</div>
+                <div class="legend-item"><span class="legend-line" style="background:rgb(140,2,0)"></span> 22,268 - 77,503</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- GeoJSON data files -->
+    <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/Municipi_1.js"></script>
+    <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/PGTUAnnessoD_5.js"></script>
+    <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/FlussiTomTomflussi_tomtom_3.js"></script>
+    <script src="Mappe Proposte_130224/Tabella 2/Mappa/layers/FlussiTomTomflussi_tomtom_2.js"></script>
+
+    <script>
+    (function() {
+        // =====================================================
+        // MAP INITIALIZATION
+        // =====================================================
+        var map = L.map('map', {
+            center: [41.9028, 12.4964],
+            zoom: 11,
+            zoomControl: true
+        });
+
+        // Base tile layer
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // =====================================================
+        // STYLE FUNCTIONS
+        // =====================================================
+
+        // Road classification colors (PGTU Annesso D)
+        var classificaColors = {
+            'A':  '#000000',  // Autostrade - black
+            'S':  '#007bff',  // Scorrimento - blue
+            'IQ': '#27f1ff',  // Interquartiere - cyan
+            'Q':  '#ff9400',  // Quartiere - orange
+            'IZ': '#e4ff00'   // Interzonali - yellow
+        };
+
+        function stylePGTU(feature) {
+            var classifica = feature.properties.Classifica || feature.properties.classifica || '';
+            return {
+                color: classificaColors[classifica] || '#888888',
+                weight: 2.5,
+                opacity: 1,
+                lineCap: 'square',
+                lineJoin: 'bevel'
+            };
+        }
+
+        // Low traffic flow colors (green gradient - Tabella 1)
+        function styleLowTraffic(feature) {
+            var value = parseFloat(feature.properties['Flussi Gio']) || 0;
+            var color;
+            if (value <= 2200)       color = 'rgb(0,138,10)';
+            else if (value <= 4159)  color = 'rgb(64,167,72)';
+            else if (value <= 6814)  color = 'rgb(128,197,133)';
+            else if (value <= 15638) color = 'rgb(191,226,194)';
+            else                     color = 'rgb(220,220,220)';
+            return { color: color, weight: 5, opacity: 0.85, lineCap: 'square', lineJoin: 'bevel' };
+        }
+
+        // High traffic flow colors (red gradient - Tabella 2)
+        function styleHighTraffic(feature) {
+            var value = parseFloat(feature.properties['Flussi Giornalieri']) || 0;
+            var color;
+            if (value <= 5822)       color = 'rgb(255,90,90)';
+            else if (value <= 6837)  color = 'rgb(239,78,77)';
+            else if (value <= 7784)  color = 'rgb(222,65,64)';
+            else if (value <= 8970)  color = 'rgb(206,52,52)';
+            else if (value <= 10982) color = 'rgb(189,40,39)';
+            else if (value <= 14485) color = 'rgb(173,27,26)';
+            else if (value <= 22268) color = 'rgb(156,15,13)';
+            else                     color = 'rgb(140,2,0)';
+            return { color: color, weight: 4, opacity: 0.85, lineCap: 'square', lineJoin: 'bevel' };
+        }
+
+        // Municipi styles
+        var defaultMunicipiStyle = {
+            color: 'rgba(0,0,0,0.35)',
+            weight: 2,
+            fillColor: 'rgba(0,121,255,0.15)',
+            fillOpacity: 0.15
+        };
+        var highlightMunicipiStyle = {
+            color: '#0050aa',
+            weight: 3.5,
+            fillColor: '#0079ff',
+            fillOpacity: 0.30
+        };
+        var dimmedMunicipiStyle = {
+            color: 'rgba(0,0,0,0.15)',
+            weight: 1,
+            fillColor: 'rgba(180,180,180,0.08)',
+            fillOpacity: 0.08
+        };
+
+        // =====================================================
+        // POPUP FUNCTIONS
+        // =====================================================
+
+        function popupPGTU(feature, layer) {
+            var p = feature.properties;
+            var classNames = { 'A': 'Autostrade', 'S': 'Scorrimento', 'IQ': 'Interquartiere', 'Q': 'Quartiere', 'IZ': 'Interzonali' };
+            var html = '<strong>' + (p.Toponomast || p.Nome || 'N/D') + '</strong><br>';
+            html += 'Classifica: <strong>' + (classNames[p.Classifica] || p.Classifica || 'N/D') + '</strong><br>';
+            if (p.Municipio) html += 'Municipio: ' + p.Municipio + '<br>';
+            if (p.Limiti) html += 'Limiti: ' + p.Limiti;
+            layer.bindPopup(html);
+        }
+
+        function popupLowTraffic(feature, layer) {
+            var p = feature.properties;
+            var html = '<strong>' + (p['Nome Strad'] || p.Toponom || 'N/D') + '</strong><br>';
+            html += 'Flussi Giornalieri: <strong>' + (Math.round(p['Flussi Gio'] || 0)).toLocaleString('it-IT') + '</strong><br>';
+            if (p['Flusso Med']) html += 'Flusso Medio: ' + Math.round(parseFloat(p['Flusso Med'])).toLocaleString('it-IT') + '<br>';
+            if (p.Municipio) html += 'Municipio: ' + p.Municipio;
+            layer.bindPopup(html);
+        }
+
+        function popupHighTraffic(feature, layer) {
+            var p = feature.properties;
+            var html = '<strong>' + (p['Nome Strada'] || p.Toponomastica || 'N/D') + '</strong><br>';
+            html += 'Flussi Giornalieri: <strong>' + (Math.round(p['Flussi Giornalieri'] || 0)).toLocaleString('it-IT') + '</strong><br>';
+            if (p['Flusso Medio']) html += 'Flusso Medio: ' + Math.round(parseFloat(p['Flusso Medio'])).toLocaleString('it-IT') + '<br>';
+            if (p.Municipio) html += 'Municipio: ' + p.Municipio;
+            layer.bindPopup(html);
+        }
+
+        function popupMunicipio(feature, layer) {
+            var p = feature.properties;
+            var html = '<strong>' + (p.Name || 'Municipio ' + p.Attuale) + '</strong>';
+            layer.bindPopup(html);
+        }
+
+        // =====================================================
+        // CREATE LAYERS
+        // =====================================================
+
+        // Municipi layer
+        var layerMunicipii = L.geoJSON(json_Municipi_1, {
+            style: defaultMunicipiStyle,
+            onEachFeature: popupMunicipio
+        }).addTo(map);
+
+        // PGTU road network
+        var layerPGTU = L.geoJSON(json_PGTUAnnessoD_5, {
+            style: stylePGTU,
+            onEachFeature: popupPGTU
+        }).addTo(map);
+
+        // Low traffic flows (Tabella 1)
+        var layerLowTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_3, {
+            style: styleLowTraffic,
+            onEachFeature: popupLowTraffic
+        }).addTo(map);
+
+        // High traffic flows (Tabella 2)
+        var layerHighTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_2, {
+            style: styleHighTraffic,
+            onEachFeature: popupHighTraffic
+        }).addTo(map);
+
+        // Bring municipi to front for selection
+        layerMunicipii.bringToFront();
+
+        // Fit map to data bounds
+        try {
+            map.fitBounds(layerMunicipii.getBounds(), { padding: [20, 20] });
+        } catch(e) {}
+
+        // =====================================================
+        // POPULATE MUNICIPI DROPDOWN
+        // =====================================================
+        var select = document.getElementById('municipio-select');
+        var municipi = [];
+        layerMunicipii.eachLayer(function(layer) {
+            var p = layer.feature.properties;
+            var label = p.Name || ('Municipio ' + (p.Attuale || p.Numero));
+            var numero = p.Numero || p.Attuale || '';
+            municipi.push({ label: label, numero: numero, layer: layer });
+        });
+        // Sort by numero
+        municipi.sort(function(a, b) {
+            return parseInt(a.numero) - parseInt(b.numero);
+        });
+        municipi.forEach(function(m) {
+            var opt = document.createElement('option');
+            opt.value = m.numero;
+            opt.textContent = m.label;
+            select.appendChild(opt);
+        });
+
+        // =====================================================
+        // MUNICIPIO SELECTION HANDLER
+        // =====================================================
+        var selectedMunicipio = null;
+
+        select.addEventListener('change', function() {
+            selectedMunicipio = this.value;
+            layerMunicipii.eachLayer(function(layer) {
+                var num = layer.feature.properties.Numero || layer.feature.properties.Attuale || '';
+                if (!selectedMunicipio) {
+                    // Show all with default style
+                    layer.setStyle(defaultMunicipiStyle);
+                } else if (String(num) === String(selectedMunicipio)) {
+                    // Highlight selected
+                    layer.setStyle(highlightMunicipiStyle);
+                    layer.bringToFront();
+                } else {
+                    // Dim others
+                    layer.setStyle(dimmedMunicipiStyle);
+                }
+            });
+        });
+
+        // =====================================================
+        // LAYER TOGGLE HANDLERS
+        // =====================================================
+        document.getElementById('toggle-pgtu').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(layerPGTU);
+                document.getElementById('legend-pgtu').style.display = '';
+            } else {
+                map.removeLayer(layerPGTU);
+                document.getElementById('legend-pgtu').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-low-traffic').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(layerLowTraffic);
+                document.getElementById('legend-low').style.display = '';
+            } else {
+                map.removeLayer(layerLowTraffic);
+                document.getElementById('legend-low').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-high-traffic').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(layerHighTraffic);
+                document.getElementById('legend-high').style.display = '';
+            } else {
+                map.removeLayer(layerHighTraffic);
+                document.getElementById('legend-high').style.display = 'none';
+            }
+        });
+
+        // =====================================================
+        // HIDE LOADING OVERLAY
+        // =====================================================
+        document.getElementById('loading').style.display = 'none';
+
+    })();
+    </script>
+</body>
+</html>
