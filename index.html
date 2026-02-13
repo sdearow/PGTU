@@ -8,7 +8,30 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+        /* Layout: map on top, table panel below */
+        #map-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        #map-container.with-table {
+            height: 55%;
+        }
         #map { width: 100%; height: 100%; }
+
+        #table-panel {
+            display: none;
+            width: 100%;
+            height: 45%;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-top: 3px solid #0079ff;
+            padding: 16px 24px;
+        }
+        #table-panel.visible {
+            display: block;
+        }
 
         /* Control panel */
         .control-panel {
@@ -85,6 +108,53 @@
             box-shadow: 0 0 0 2px rgba(0,121,255,0.2);
         }
 
+        /* Search box */
+        .search-container {
+            position: relative;
+        }
+        #road-search {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 13px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+        }
+        #road-search:focus {
+            outline: none;
+            border-color: #0079ff;
+            box-shadow: 0 0 0 2px rgba(0,121,255,0.2);
+        }
+        #search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1001;
+            display: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .search-result-item {
+            padding: 6px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .search-result-item:hover {
+            background: #e8f0fe;
+        }
+        .search-result-item .result-type {
+            font-size: 10px;
+            color: #888;
+            margin-left: 4px;
+        }
+
         /* Legend sections */
         .legend-item {
             display: flex;
@@ -108,10 +178,175 @@
         /* Info popup */
         .leaflet-popup-content {
             font-size: 13px;
-            line-height: 1.5;
+            line-height: 1.6;
+            max-width: 320px;
         }
         .leaflet-popup-content strong {
             color: #333;
+        }
+        .popup-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+        }
+        .popup-table th {
+            text-align: left;
+            color: #555;
+            font-weight: 600;
+            padding: 2px 8px 2px 0;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .popup-table td {
+            padding: 2px 0;
+            font-size: 12px;
+            color: #333;
+        }
+        .popup-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 4px;
+        }
+        .popup-layer-badge {
+            display: inline-block;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            color: white;
+            margin-bottom: 4px;
+        }
+
+        /* Measure tool */
+        .leaflet-measure-control {
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+            padding: 6px 10px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            border: 2px solid rgba(0,0,0,0.2);
+        }
+        .leaflet-measure-control:hover {
+            background: #f0f0f0;
+        }
+        .leaflet-measure-control.active {
+            background: #0079ff;
+            color: white;
+            border-color: #005fc4;
+        }
+        .measure-tooltip {
+            background: rgba(0,0,0,0.75);
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        /* Table panel styles */
+        #table-panel h3 {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .table-header h3 {
+            margin-bottom: 0;
+        }
+        .table-stats {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .stat-box {
+            background: white;
+            border-radius: 6px;
+            padding: 8px 14px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .stat-box .stat-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #0079ff;
+        }
+        .stat-box .stat-label {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        .close-table-btn {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .close-table-btn:hover {
+            background: #c0392b;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+        .tab-btn {
+            padding: 6px 14px;
+            border: 1px solid #ccc;
+            background: white;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-size: 13px;
+            color: #555;
+        }
+        .tab-btn.active {
+            background: #0079ff;
+            color: white;
+            border-color: #0079ff;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            font-size: 12px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        .data-table thead th {
+            background: #2c3e50;
+            color: white;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 11px;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+        }
+        .data-table tbody td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #eee;
+            color: #333;
+        }
+        .data-table tbody tr:hover {
+            background: #f0f7ff;
+        }
+        .data-table tbody tr:nth-child(even) {
+            background: #fafafa;
+        }
+        .data-table tbody tr:nth-child(even):hover {
+            background: #f0f7ff;
         }
 
         /* Loading overlay */
@@ -145,64 +380,88 @@
         <p>Caricamento dati mappa...</p>
     </div>
 
-    <div id="map"></div>
+    <div id="map-container">
+        <div id="map"></div>
 
-    <div class="control-panel">
-        <h2>PGTU Roma</h2>
+        <div class="control-panel">
+            <h2>PGTU Roma</h2>
 
-        <!-- Municipi selector -->
-        <div class="control-section">
-            <h3>Municipi</h3>
-            <select id="municipio-select">
-                <option value="">Tutti i Municipi</option>
-            </select>
+            <!-- Road search -->
+            <div class="control-section">
+                <h3>Cerca Strada</h3>
+                <div class="search-container">
+                    <input type="text" id="road-search" placeholder="Digita il nome della strada...">
+                    <div id="search-results"></div>
+                </div>
+            </div>
+
+            <!-- Municipi selector -->
+            <div class="control-section">
+                <h3>Municipi</h3>
+                <select id="municipio-select">
+                    <option value="">Tutti i Municipi</option>
+                </select>
+            </div>
+
+            <!-- Layer toggles -->
+            <div class="control-section">
+                <h3>Rete Stradale Principale</h3>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-pgtu" checked>
+                    <label for="toggle-pgtu">PGTU - Annesso D</label>
+                </div>
+                <div class="legend-block" id="legend-pgtu">
+                    <div class="legend-item"><span class="legend-line" style="background:#000"></span> Autostrade (A)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#007bff"></span> Scorrimento (S)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#27f1ff"></span> Interquartiere (IQ)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#ff9400"></span> Quartiere (Q)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#e4ff00"></span> Interzonali (IZ)</div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Analisi Flussi di Traffico</h3>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-low-traffic" checked>
+                    <label for="toggle-low-traffic">Flussi Bassi (Rete Principale)</label>
+                </div>
+                <div class="legend-block" id="legend-low">
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(0,138,10)"></span> 101 - 2,200</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(64,167,72)"></span> 2,200 - 4,159</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(128,197,133)"></span> 4,159 - 6,814</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(191,226,194)"></span> 6,814 - 15,638</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(220,220,220)"></span> 15,638 - 57,833</div>
+                </div>
+
+                <div class="layer-toggle" style="margin-top: 8px;">
+                    <input type="checkbox" id="toggle-high-traffic" checked>
+                    <label for="toggle-high-traffic">Flussi Elevati (Fuori Rete)</label>
+                </div>
+                <div class="legend-block" id="legend-high">
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(255,90,90)"></span> 5,002 - 5,822</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(239,78,77)"></span> 5,822 - 6,837</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(222,65,64)"></span> 6,837 - 7,784</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(206,52,52)"></span> 7,784 - 8,970</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(189,40,39)"></span> 8,970 - 10,982</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(173,27,26)"></span> 10,982 - 14,485</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(156,15,13)"></span> 14,485 - 22,268</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(140,2,0)"></span> 22,268 - 77,503</div>
+                </div>
+            </div>
         </div>
+    </div>
 
-        <!-- Layer toggles -->
-        <div class="control-section">
-            <h3>Rete Stradale Principale</h3>
-            <div class="layer-toggle">
-                <input type="checkbox" id="toggle-pgtu" checked>
-                <label for="toggle-pgtu">PGTU - Annesso D</label>
-            </div>
-            <div class="legend-block" id="legend-pgtu">
-                <div class="legend-item"><span class="legend-line" style="background:#000"></span> Autostrade (A)</div>
-                <div class="legend-item"><span class="legend-line" style="background:#007bff"></span> Scorrimento (S)</div>
-                <div class="legend-item"><span class="legend-line" style="background:#27f1ff"></span> Interquartiere (IQ)</div>
-                <div class="legend-item"><span class="legend-line" style="background:#ff9400"></span> Quartiere (Q)</div>
-                <div class="legend-item"><span class="legend-line" style="background:#e4ff00"></span> Interzonali (IZ)</div>
-            </div>
+    <div id="table-panel">
+        <div class="table-header">
+            <h3 id="table-title">Dati Municipio</h3>
+            <button class="close-table-btn" id="close-table-btn">Chiudi Tabella</button>
         </div>
-
-        <div class="control-section">
-            <h3>Analisi Flussi di Traffico</h3>
-            <div class="layer-toggle">
-                <input type="checkbox" id="toggle-low-traffic" checked>
-                <label for="toggle-low-traffic">Flussi Bassi (Rete Principale)</label>
-            </div>
-            <div class="legend-block" id="legend-low">
-                <div class="legend-item"><span class="legend-line" style="background:rgb(0,138,10)"></span> 101 - 2,200</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(64,167,72)"></span> 2,200 - 4,159</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(128,197,133)"></span> 4,159 - 6,814</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(191,226,194)"></span> 6,814 - 15,638</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(220,220,220)"></span> 15,638 - 57,833</div>
-            </div>
-
-            <div class="layer-toggle" style="margin-top: 8px;">
-                <input type="checkbox" id="toggle-high-traffic" checked>
-                <label for="toggle-high-traffic">Flussi Elevati (Fuori Rete)</label>
-            </div>
-            <div class="legend-block" id="legend-high">
-                <div class="legend-item"><span class="legend-line" style="background:rgb(255,90,90)"></span> 5,002 - 5,822</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(239,78,77)"></span> 5,822 - 6,837</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(222,65,64)"></span> 6,837 - 7,784</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(206,52,52)"></span> 7,784 - 8,970</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(189,40,39)"></span> 8,970 - 10,982</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(173,27,26)"></span> 10,982 - 14,485</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(156,15,13)"></span> 14,485 - 22,268</div>
-                <div class="legend-item"><span class="legend-line" style="background:rgb(140,2,0)"></span> 22,268 - 77,503</div>
-            </div>
+        <div class="table-stats" id="table-stats"></div>
+        <div class="tab-buttons" id="tab-buttons">
+            <button class="tab-btn active" data-tab="tab1">Tabella 1 - Flussi Bassi (Rete Principale)</button>
+            <button class="tab-btn" data-tab="tab2">Tabella 2 - Flussi Elevati (Fuori Rete)</button>
         </div>
+        <div id="tab-content"></div>
     </div>
 
     <!-- Leaflet JS -->
@@ -213,6 +472,10 @@
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/PGTUAnnessoD_5.js"></script>
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/FlussiTomTomflussi_tomtom_3.js"></script>
     <script src="Mappe Proposte_130224/Tabella 2/Mappa/layers/FlussiTomTomflussi_tomtom_2.js"></script>
+
+    <!-- Excel data converted to JSON -->
+    <script src="data_tabella1.js"></script>
+    <script src="data_tabella2.js"></script>
 
     <script>
     (function() {
@@ -237,11 +500,15 @@
 
         // Road classification colors (PGTU Annesso D)
         var classificaColors = {
-            'A':  '#000000',  // Autostrade - black
-            'S':  '#007bff',  // Scorrimento - blue
-            'IQ': '#27f1ff',  // Interquartiere - cyan
-            'Q':  '#ff9400',  // Quartiere - orange
-            'IZ': '#e4ff00'   // Interzonali - yellow
+            'A':  '#000000',
+            'S':  '#007bff',
+            'IQ': '#27f1ff',
+            'Q':  '#ff9400',
+            'IZ': '#e4ff00'
+        };
+        var classificaNames = {
+            'A': 'Autostrade', 'S': 'Scorrimento', 'IQ': 'Interquartiere',
+            'Q': 'Quartiere', 'IZ': 'Interzonali'
         };
 
         function stylePGTU(feature) {
@@ -255,7 +522,6 @@
             };
         }
 
-        // Low traffic flow colors (green gradient - Tabella 1)
         function styleLowTraffic(feature) {
             var value = parseFloat(feature.properties['Flussi Gio']) || 0;
             var color;
@@ -267,7 +533,6 @@
             return { color: color, weight: 5, opacity: 0.85, lineCap: 'square', lineJoin: 'bevel' };
         }
 
-        // High traffic flow colors (red gradient - Tabella 2)
         function styleHighTraffic(feature) {
             var value = parseFloat(feature.properties['Flussi Giornalieri']) || 0;
             var color;
@@ -284,92 +549,127 @@
 
         // Municipi styles
         var defaultMunicipiStyle = {
-            color: 'rgba(0,0,0,0.35)',
-            weight: 2,
-            fillColor: 'rgba(0,121,255,0.15)',
-            fillOpacity: 0.15
+            color: 'rgba(0,0,0,0.35)', weight: 2,
+            fillColor: 'rgba(0,121,255,0.15)', fillOpacity: 0.15
         };
         var highlightMunicipiStyle = {
-            color: '#0050aa',
-            weight: 3.5,
-            fillColor: '#0079ff',
-            fillOpacity: 0.30
+            color: '#0050aa', weight: 3.5,
+            fillColor: '#0079ff', fillOpacity: 0.30
         };
         var dimmedMunicipiStyle = {
-            color: 'rgba(0,0,0,0.15)',
-            weight: 1,
-            fillColor: 'rgba(180,180,180,0.08)',
-            fillOpacity: 0.08
+            color: 'rgba(0,0,0,0.15)', weight: 1,
+            fillColor: 'rgba(180,180,180,0.08)', fillOpacity: 0.08
         };
 
         // =====================================================
-        // POPUP FUNCTIONS
+        // POPUP FUNCTIONS (detailed, like previous maps)
         // =====================================================
+
+        function fmt(val) {
+            if (val === null || val === undefined || val === '' || val === 'None' || val === 'null') return null;
+            return val;
+        }
+        function fmtNum(val) {
+            var n = parseFloat(val);
+            if (isNaN(n)) return null;
+            return Math.round(n).toLocaleString('it-IT');
+        }
+
+        function popupRow(label, value) {
+            if (value === null || value === undefined) return '';
+            return '<tr><th>' + label + '</th><td>' + value + '</td></tr>';
+        }
 
         function popupPGTU(feature, layer) {
             var p = feature.properties;
-            var classNames = { 'A': 'Autostrade', 'S': 'Scorrimento', 'IQ': 'Interquartiere', 'Q': 'Quartiere', 'IZ': 'Interzonali' };
-            var html = '<strong>' + (p.Toponomast || p.Nome || 'N/D') + '</strong><br>';
-            html += 'Classifica: <strong>' + (classNames[p.Classifica] || p.Classifica || 'N/D') + '</strong><br>';
-            if (p.Municipio) html += 'Municipio: ' + p.Municipio + '<br>';
-            if (p.Limiti) html += 'Limiti: ' + p.Limiti;
-            layer.bindPopup(html);
+            var name = fmt(p.Toponomast) || fmt(p.Nome) || 'N/D';
+            var html = '<div class="popup-title">' + name + '</div>';
+            html += '<span class="popup-layer-badge" style="background:#2c3e50;">Rete Stradale PGTU</span>';
+            html += '<table class="popup-table">';
+            html += popupRow('Classificazione', classificaNames[p.Classifica] ? classificaNames[p.Classifica] + ' (' + p.Classifica + ')' : fmt(p.Classifica));
+            html += popupRow('Limiti', fmt(p.Limiti));
+            html += popupRow('Cod. Progressivo', fmt(p.Cod_prog));
+            html += popupRow('Municipio', fmt(p.Municipio));
+            html += popupRow('Grande Viabilit&agrave;', fmt(p.Grande_Via));
+            html += popupRow('TPL', fmt(p.TPL));
+            if (p.Note_2025 && p.Note_2025 !== '-') html += popupRow('Note 2025', p.Note_2025);
+            html += '</table>';
+            layer.bindPopup(html, { maxWidth: 340 });
         }
 
         function popupLowTraffic(feature, layer) {
             var p = feature.properties;
-            var html = '<strong>' + (p['Nome Strad'] || p.Toponom || 'N/D') + '</strong><br>';
-            html += 'Flussi Giornalieri: <strong>' + (Math.round(p['Flussi Gio'] || 0)).toLocaleString('it-IT') + '</strong><br>';
-            if (p['Flusso Med']) html += 'Flusso Medio: ' + Math.round(parseFloat(p['Flusso Med'])).toLocaleString('it-IT') + '<br>';
-            if (p.Municipio) html += 'Municipio: ' + p.Municipio;
-            layer.bindPopup(html);
+            var name = fmt(p['Nome Strad']) || fmt(p.Toponom) || fmt(p.Toponomast) || 'N/D';
+            var html = '<div class="popup-title">' + name + '</div>';
+            html += '<span class="popup-layer-badge" style="background:rgb(0,138,10);">Flussi Bassi (Tab. 1)</span>';
+            html += '<table class="popup-table">';
+            if (p.Toponomast && p.Toponomast !== name) html += popupRow('Toponomastica', p.Toponomast);
+            html += popupRow('Flussi Giornalieri', fmtNum(p['Flussi Gio']));
+            html += popupRow('Flusso Medio', fmtNum(p['Flusso Med']));
+            html += popupRow('Classificazione', fmt(p.CF));
+            html += popupRow('Municipio', fmt(p.Municipio));
+            html += popupRow('Linea ATAC', p.Is_ATAC === true || p.Is_ATAC === 'true' ? 'S&igrave;' : p.Is_ATAC === false || p.Is_ATAC === 'false' ? 'No' : null);
+            html += popupRow('Grande Viabilit&agrave;', p.Is_GrandeV === true || p.Is_GrandeV === 'true' ? 'S&igrave;' : p.Is_GrandeV === false || p.Is_GrandeV === 'false' ? 'No' : null);
+            html += popupRow('In Annesso D', p.Is_Annesso === true || p.Is_Annesso === 'true' ? 'S&igrave;' : p.Is_Annesso === false || p.Is_Annesso === 'false' ? 'No' : null);
+            html += '</table>';
+            layer.bindPopup(html, { maxWidth: 340 });
         }
 
         function popupHighTraffic(feature, layer) {
             var p = feature.properties;
-            var html = '<strong>' + (p['Nome Strada'] || p.Toponomastica || 'N/D') + '</strong><br>';
-            html += 'Flussi Giornalieri: <strong>' + (Math.round(p['Flussi Giornalieri'] || 0)).toLocaleString('it-IT') + '</strong><br>';
-            if (p['Flusso Medio']) html += 'Flusso Medio: ' + Math.round(parseFloat(p['Flusso Medio'])).toLocaleString('it-IT') + '<br>';
-            if (p.Municipio) html += 'Municipio: ' + p.Municipio;
-            layer.bindPopup(html);
+            var name = fmt(p['Nome Strada']) || fmt(p.Toponomastica) || fmt(p.Toponom) || 'N/D';
+            var html = '<div class="popup-title">' + name + '</div>';
+            html += '<span class="popup-layer-badge" style="background:rgb(140,2,0);">Flussi Elevati (Tab. 2)</span>';
+            html += '<table class="popup-table">';
+            if (p.Toponomastica && p.Toponomastica !== name) html += popupRow('Toponomastica', p.Toponomastica);
+            html += popupRow('Flussi Giornalieri', fmtNum(p['Flussi Giornalieri']));
+            html += popupRow('Flusso Medio', fmtNum(p['Flusso Medio']));
+            html += popupRow('Classificazione', fmt(p.CF));
+            html += popupRow('Municipio', fmt(p.Municipio));
+            html += popupRow('Linea ATAC', p.Is_ATAC === true || p.Is_ATAC === 'true' ? 'S&igrave;' : p.Is_ATAC === false || p.Is_ATAC === 'false' ? 'No' : null);
+            html += popupRow('Grande Viabilit&agrave;', p.Is_GrandeViabilita === true || p.Is_GrandeViabilita === 'true' ? 'S&igrave;' : p.Is_GrandeViabilita === false || p.Is_GrandeViabilita === 'false' ? 'No' : null);
+            html += popupRow('In Annesso D', p.Is_AnnessoD === true || p.Is_AnnessoD === 'true' ? 'S&igrave;' : p.Is_AnnessoD === false || p.Is_AnnessoD === 'false' ? 'No' : null);
+            html += '</table>';
+            layer.bindPopup(html, { maxWidth: 340 });
         }
 
         function popupMunicipio(feature, layer) {
             var p = feature.properties;
-            var html = '<strong>' + (p.Name || 'Municipio ' + p.Attuale) + '</strong>';
-            layer.bindPopup(html);
+            var html = '<div class="popup-title">' + (p.Name || 'Municipio ' + p.Attuale) + '</div>';
+            html += '<table class="popup-table">';
+            html += popupRow('Numero', p.Numero);
+            html += popupRow('Denominazione', p.Attuale);
+            html += '</table>';
+            layer.bindPopup(html, { maxWidth: 300 });
         }
 
         // =====================================================
-        // CREATE LAYERS
+        // CREATE LAYERS - Traffic flows UNDER road network
         // =====================================================
 
-        // Municipi layer
+        // 1. Municipi layer (base)
         var layerMunicipii = L.geoJSON(json_Municipi_1, {
             style: defaultMunicipiStyle,
             onEachFeature: popupMunicipio
         }).addTo(map);
 
-        // PGTU road network
-        var layerPGTU = L.geoJSON(json_PGTUAnnessoD_5, {
-            style: stylePGTU,
-            onEachFeature: popupPGTU
-        }).addTo(map);
-
-        // Low traffic flows (Tabella 1)
+        // 2. Low traffic flows (UNDER road network)
         var layerLowTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_3, {
             style: styleLowTraffic,
             onEachFeature: popupLowTraffic
         }).addTo(map);
 
-        // High traffic flows (Tabella 2)
+        // 3. High traffic flows (UNDER road network)
         var layerHighTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_2, {
             style: styleHighTraffic,
             onEachFeature: popupHighTraffic
         }).addTo(map);
 
-        // Bring municipi to front for selection
-        layerMunicipii.bringToFront();
+        // 4. PGTU road network (ON TOP of traffic flows)
+        var layerPGTU = L.geoJSON(json_PGTUAnnessoD_5, {
+            style: stylePGTU,
+            onEachFeature: popupPGTU
+        }).addTo(map);
 
         // Fit map to data bounds
         try {
@@ -387,7 +687,6 @@
             var numero = p.Numero || p.Attuale || '';
             municipi.push({ label: label, numero: numero, layer: layer });
         });
-        // Sort by numero
         municipi.sort(function(a, b) {
             return parseInt(a.numero) - parseInt(b.numero);
         });
@@ -399,27 +698,422 @@
         });
 
         // =====================================================
-        // MUNICIPIO SELECTION HANDLER
+        // ROAD SEARCH
+        // =====================================================
+        var searchInput = document.getElementById('road-search');
+        var searchResults = document.getElementById('search-results');
+        var searchIndex = [];
+
+        // Build search index from all layers
+        function buildSearchIndex() {
+            // PGTU roads
+            layerPGTU.eachLayer(function(layer) {
+                var p = layer.feature.properties;
+                var name = p.Toponomast || p.Nome || '';
+                if (name) {
+                    searchIndex.push({ name: name, type: 'PGTU', layer: layer });
+                }
+            });
+            // Low traffic
+            layerLowTraffic.eachLayer(function(layer) {
+                var p = layer.feature.properties;
+                var name = p['Nome Strad'] || p.Toponom || p.Toponomast || '';
+                if (name) {
+                    searchIndex.push({ name: name, type: 'Flussi Bassi', layer: layer });
+                }
+            });
+            // High traffic
+            layerHighTraffic.eachLayer(function(layer) {
+                var p = layer.feature.properties;
+                var name = p['Nome Strada'] || p.Toponomastica || p.Toponom || '';
+                if (name) {
+                    searchIndex.push({ name: name, type: 'Flussi Elevati', layer: layer });
+                }
+            });
+        }
+        buildSearchIndex();
+
+        // Remove duplicate names per type
+        var seen = {};
+        searchIndex = searchIndex.filter(function(item) {
+            var key = item.name + '||' + item.type;
+            if (seen[key]) return false;
+            seen[key] = true;
+            return true;
+        });
+
+        var searchTimeout;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            var query = this.value.trim().toLowerCase();
+            if (query.length < 2) {
+                searchResults.style.display = 'none';
+                return;
+            }
+            searchTimeout = setTimeout(function() {
+                var matches = [];
+                for (var i = 0; i < searchIndex.length && matches.length < 30; i++) {
+                    if (searchIndex[i].name.toLowerCase().indexOf(query) !== -1) {
+                        matches.push(searchIndex[i]);
+                    }
+                }
+                if (matches.length === 0) {
+                    searchResults.style.display = 'none';
+                    return;
+                }
+                var html = '';
+                matches.forEach(function(m) {
+                    html += '<div class="search-result-item" data-idx="' + searchIndex.indexOf(m) + '">';
+                    html += m.name + '<span class="result-type">' + m.type + '</span></div>';
+                });
+                searchResults.innerHTML = html;
+                searchResults.style.display = 'block';
+            }, 150);
+        });
+
+        searchResults.addEventListener('click', function(e) {
+            var item = e.target.closest('.search-result-item');
+            if (!item) return;
+            var idx = parseInt(item.getAttribute('data-idx'));
+            var match = searchIndex[idx];
+            if (match && match.layer) {
+                var bounds = match.layer.getBounds ? match.layer.getBounds() : null;
+                if (bounds) {
+                    map.fitBounds(bounds, { maxZoom: 16, padding: [40, 40] });
+                } else if (match.layer.getLatLng) {
+                    map.setView(match.layer.getLatLng(), 16);
+                }
+                match.layer.openPopup();
+                // Flash highlight
+                var origStyle = match.layer.options;
+                match.layer.setStyle({ color: '#ff00ff', weight: 8, opacity: 1 });
+                setTimeout(function() {
+                    if (match.type === 'PGTU') match.layer.setStyle(stylePGTU(match.layer.feature));
+                    else if (match.type === 'Flussi Bassi') match.layer.setStyle(styleLowTraffic(match.layer.feature));
+                    else match.layer.setStyle(styleHighTraffic(match.layer.feature));
+                }, 2000);
+            }
+            searchResults.style.display = 'none';
+            searchInput.value = match.name;
+        });
+
+        // Close search when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.search-container')) {
+                searchResults.style.display = 'none';
+            }
+        });
+
+        // =====================================================
+        // DISTANCE MEASUREMENT TOOL
+        // =====================================================
+        var MeasureControl = L.Control.extend({
+            options: { position: 'topleft' },
+            onAdd: function(map) {
+                var container = L.DomUtil.create('div', 'leaflet-measure-control leaflet-bar');
+                container.innerHTML = '&#x1F4CF;';
+                container.title = 'Misura distanza';
+                L.DomEvent.disableClickPropagation(container);
+                container.addEventListener('click', function() {
+                    toggleMeasure();
+                });
+                this._container = container;
+                return container;
+            }
+        });
+        map.addControl(new MeasureControl());
+
+        var measuring = false;
+        var measurePoints = [];
+        var measureMarkers = [];
+        var measureLines = [];
+        var measureTooltips = [];
+
+        function toggleMeasure() {
+            measuring = !measuring;
+            var btn = document.querySelector('.leaflet-measure-control');
+            if (measuring) {
+                btn.classList.add('active');
+                map.getContainer().style.cursor = 'crosshair';
+                map.on('click', onMeasureClick);
+            } else {
+                btn.classList.remove('active');
+                map.getContainer().style.cursor = '';
+                map.off('click', onMeasureClick);
+                clearMeasure();
+            }
+        }
+
+        function clearMeasure() {
+            measureMarkers.forEach(function(m) { map.removeLayer(m); });
+            measureLines.forEach(function(l) { map.removeLayer(l); });
+            measureTooltips.forEach(function(t) { map.removeLayer(t); });
+            measurePoints = [];
+            measureMarkers = [];
+            measureLines = [];
+            measureTooltips = [];
+        }
+
+        function formatDist(meters) {
+            if (meters >= 1000) return (meters / 1000).toFixed(2) + ' km';
+            return Math.round(meters) + ' m';
+        }
+
+        function onMeasureClick(e) {
+            measurePoints.push(e.latlng);
+
+            // Add marker
+            var marker = L.circleMarker(e.latlng, {
+                radius: 5, color: '#0079ff', fillColor: '#fff',
+                fillOpacity: 1, weight: 2
+            }).addTo(map);
+            measureMarkers.push(marker);
+
+            if (measurePoints.length > 1) {
+                var prev = measurePoints[measurePoints.length - 2];
+                var curr = measurePoints[measurePoints.length - 1];
+
+                // Draw line segment
+                var line = L.polyline([prev, curr], {
+                    color: '#0079ff', weight: 3, dashArray: '8,6', opacity: 0.9
+                }).addTo(map);
+                measureLines.push(line);
+
+                // Calculate total distance
+                var totalDist = 0;
+                for (var i = 1; i < measurePoints.length; i++) {
+                    totalDist += measurePoints[i - 1].distanceTo(measurePoints[i]);
+                }
+
+                // Segment distance tooltip
+                var segDist = prev.distanceTo(curr);
+                var midLat = (prev.lat + curr.lat) / 2;
+                var midLng = (prev.lng + curr.lng) / 2;
+                var tooltip = L.tooltip({
+                    permanent: true,
+                    direction: 'center',
+                    className: 'measure-tooltip'
+                }).setLatLng([midLat, midLng])
+                  .setContent(formatDist(segDist))
+                  .addTo(map);
+                measureTooltips.push(tooltip);
+
+                // Total distance tooltip on last point
+                if (measurePoints.length > 2) {
+                    // Remove previous total tooltip if exists
+                    var last = measureTooltips[measureTooltips.length - 2];
+                }
+                var totalTooltip = L.tooltip({
+                    permanent: true,
+                    direction: 'top',
+                    className: 'measure-tooltip',
+                    offset: [0, -10]
+                }).setLatLng(curr)
+                  .setContent('Totale: ' + formatDist(totalDist))
+                  .addTo(map);
+                measureTooltips.push(totalTooltip);
+            }
+        }
+
+        // Double click to finish measurement
+        map.on('dblclick', function(e) {
+            if (measuring) {
+                L.DomEvent.stopPropagation(e);
+                L.DomEvent.preventDefault(e);
+            }
+        });
+
+        // =====================================================
+        // MUNICIPIO SELECTION & TABLE DISPLAY
         // =====================================================
         var selectedMunicipio = null;
+        var activeTab = 'tab1';
 
         select.addEventListener('change', function() {
             selectedMunicipio = this.value;
+
+            // Update municipality highlighting
             layerMunicipii.eachLayer(function(layer) {
                 var num = layer.feature.properties.Numero || layer.feature.properties.Attuale || '';
                 if (!selectedMunicipio) {
-                    // Show all with default style
                     layer.setStyle(defaultMunicipiStyle);
                 } else if (String(num) === String(selectedMunicipio)) {
-                    // Highlight selected
                     layer.setStyle(highlightMunicipiStyle);
                     layer.bringToFront();
                 } else {
-                    // Dim others
                     layer.setStyle(dimmedMunicipiStyle);
                 }
             });
+
+            // Show/hide table panel
+            if (selectedMunicipio) {
+                showTablePanel(selectedMunicipio);
+            } else {
+                hideTablePanel();
+            }
         });
+
+        function showTablePanel(munNum) {
+            var panel = document.getElementById('table-panel');
+            var container = document.getElementById('map-container');
+            panel.classList.add('visible');
+            container.classList.add('with-table');
+            map.invalidateSize();
+
+            // Find municipio name
+            var munName = 'Municipio ' + munNum;
+            for (var i = 0; i < municipi.length; i++) {
+                if (String(municipi[i].numero) === String(munNum)) {
+                    munName = municipi[i].label;
+                    break;
+                }
+            }
+            document.getElementById('table-title').textContent = 'Dati - ' + munName;
+
+            // Show stats and the appropriate table
+            updateTableContent(munNum);
+        }
+
+        function hideTablePanel() {
+            var panel = document.getElementById('table-panel');
+            var container = document.getElementById('map-container');
+            panel.classList.remove('visible');
+            container.classList.remove('with-table');
+            map.invalidateSize();
+        }
+
+        document.getElementById('close-table-btn').addEventListener('click', function() {
+            hideTablePanel();
+            select.value = '';
+            selectedMunicipio = null;
+            layerMunicipii.eachLayer(function(layer) {
+                layer.setStyle(defaultMunicipiStyle);
+            });
+        });
+
+        // Tab switching
+        document.getElementById('tab-buttons').addEventListener('click', function(e) {
+            var btn = e.target.closest('.tab-btn');
+            if (!btn) return;
+            activeTab = btn.getAttribute('data-tab');
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            if (selectedMunicipio) updateTableContent(selectedMunicipio);
+        });
+
+        function updateTableContent(munNum) {
+            var data1 = (typeof dataTabella1 !== 'undefined' && dataTabella1[munNum]) ? dataTabella1[munNum] : [];
+            var data2 = (typeof dataTabella2 !== 'undefined' && dataTabella2[munNum]) ? dataTabella2[munNum] : [];
+
+            // Stats
+            var statsHtml = '';
+            statsHtml += '<div class="stat-box"><div class="stat-value">' + data1.length + '</div><div class="stat-label">Strade in Tabella 1<br>(Rete Principale)</div></div>';
+            statsHtml += '<div class="stat-box"><div class="stat-value">' + data2.length + '</div><div class="stat-label">Strade in Tabella 2<br>(Fuori Rete)</div></div>';
+            statsHtml += '<div class="stat-box"><div class="stat-value">' + (data1.length + data2.length) + '</div><div class="stat-label">Totale Strade<br>Analizzate</div></div>';
+
+            // Average flows
+            if (data1.length > 0) {
+                var avg1 = data1.reduce(function(s, r) { return s + (parseFloat(r['Flusso medio']) || 0); }, 0) / data1.length;
+                statsHtml += '<div class="stat-box"><div class="stat-value">' + Math.round(avg1).toLocaleString('it-IT') + '</div><div class="stat-label">Flusso Medio Tab.1<br>(veicoli/giorno)</div></div>';
+            }
+            if (data2.length > 0) {
+                var avg2 = data2.reduce(function(s, r) { return s + (parseFloat(r['Flusso medio']) || 0); }, 0) / data2.length;
+                statsHtml += '<div class="stat-box"><div class="stat-value">' + Math.round(avg2).toLocaleString('it-IT') + '</div><div class="stat-label">Flusso Medio Tab.2<br>(veicoli/giorno)</div></div>';
+            }
+
+            document.getElementById('table-stats').innerHTML = statsHtml;
+
+            // Render appropriate table
+            var content = document.getElementById('tab-content');
+            if (activeTab === 'tab1') {
+                content.innerHTML = renderTable1(data1);
+            } else {
+                content.innerHTML = renderTable2(data2);
+            }
+        }
+
+        function renderTable1(data) {
+            if (data.length === 0) return '<p style="color:#888;padding:12px;">Nessun dato disponibile per questo municipio.</p>';
+            var html = '<table class="data-table"><thead><tr>';
+            html += '<th>#</th>';
+            html += '<th>Identificazione Strada</th>';
+            html += '<th>Classificazione</th>';
+            html += '<th>% PGTU</th>';
+            html += '<th>Flusso Medio</th>';
+            html += '<th>Flusso Min</th>';
+            html += '<th>Flusso Max</th>';
+            html += '<th>TPL</th>';
+            html += '<th>GV</th>';
+            html += '</tr></thead><tbody>';
+            data.forEach(function(row, idx) {
+                html += '<tr>';
+                html += '<td>' + (idx + 1) + '</td>';
+                html += '<td>' + (row['Identificazione Strada'] || '') + '</td>';
+                html += '<td>' + (row['Classificazione'] || '') + '</td>';
+                html += '<td>' + (row['% PGTU'] !== undefined && row['% PGTU'] !== '' ? (parseFloat(row['% PGTU']) * 100).toFixed(0) + '%' : '') + '</td>';
+                html += '<td>' + fmtCell(row['Flusso medio']) + '</td>';
+                html += '<td>' + fmtCell(row['Flusso Min']) + '</td>';
+                html += '<td>' + fmtCell(row['Flusso Max']) + '</td>';
+                html += '<td>' + (row['Is_TPL'] || '') + '</td>';
+                html += '<td>' + (row['Is_GV'] || '') + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function renderTable2(data) {
+            if (data.length === 0) return '<p style="color:#888;padding:12px;">Nessun dato disponibile per questo municipio.</p>';
+            var html = '<table class="data-table"><thead><tr>';
+            html += '<th>#</th>';
+            html += '<th>Identificazione Strada</th>';
+            html += '<th>Flusso Medio</th>';
+            html += '<th>Flusso Min</th>';
+            html += '<th>Flusso Max</th>';
+            html += '<th>TPL</th>';
+            html += '<th>GV</th>';
+            html += '</tr></thead><tbody>';
+            data.forEach(function(row, idx) {
+                html += '<tr>';
+                html += '<td>' + (idx + 1) + '</td>';
+                html += '<td>' + (row['Identificazione Strada'] || '') + '</td>';
+                html += '<td>' + fmtCell(row['Flusso medio']) + '</td>';
+                html += '<td>' + fmtCell(row['Flusso Min']) + '</td>';
+                html += '<td>' + fmtCell(row['Flusso Max']) + '</td>';
+                html += '<td>' + (row['Is_TPL'] || '') + '</td>';
+                html += '<td>' + (row['Is_GV'] || '') + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table>';
+            return html;
+        }
+
+        function fmtCell(val) {
+            if (val === null || val === undefined || val === '') return '';
+            var n = parseFloat(val);
+            if (isNaN(n)) return val;
+            return Math.round(n).toLocaleString('it-IT');
+        }
+
+        // Auto-switch tab based on traffic layer toggle
+        document.getElementById('toggle-low-traffic').addEventListener('change', function() {
+            if (this.checked && !document.getElementById('toggle-high-traffic').checked) {
+                setActiveTab('tab1');
+            }
+        });
+        document.getElementById('toggle-high-traffic').addEventListener('change', function() {
+            if (this.checked && !document.getElementById('toggle-low-traffic').checked) {
+                setActiveTab('tab2');
+            }
+        });
+
+        function setActiveTab(tab) {
+            activeTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(function(b) {
+                b.classList.toggle('active', b.getAttribute('data-tab') === tab);
+            });
+            if (selectedMunicipio) updateTableContent(selectedMunicipio);
+        }
 
         // =====================================================
         // LAYER TOGGLE HANDLERS
@@ -437,6 +1131,8 @@
         document.getElementById('toggle-low-traffic').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(layerLowTraffic);
+                // Ensure PGTU stays on top
+                if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
                 document.getElementById('legend-low').style.display = '';
             } else {
                 map.removeLayer(layerLowTraffic);
@@ -447,6 +1143,8 @@
         document.getElementById('toggle-high-traffic').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(layerHighTraffic);
+                // Ensure PGTU stays on top
+                if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
                 document.getElementById('legend-high').style.display = '';
             } else {
                 map.removeLayer(layerHighTraffic);
