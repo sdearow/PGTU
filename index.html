@@ -214,7 +214,14 @@
             width: 24px;
             height: 0;
             margin-right: 6px;
-            border-top: 3px dashed;
+            border-top: 4px dashed;
+            flex-shrink: 0;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 6px;
             flex-shrink: 0;
         }
         .legend-block {
@@ -264,6 +271,39 @@
             border-radius: 3px;
             color: white;
             margin-bottom: 4px;
+        }
+        .popup-notes {
+            margin-top: 6px;
+            padding: 6px 8px;
+            background: #fffde7;
+            border-left: 3px solid #ffc107;
+            border-radius: 2px;
+            font-size: 12px;
+            color: #333;
+            white-space: pre-wrap;
+        }
+        .popup-btn {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 3px 10px;
+            border: none;
+            border-radius: 3px;
+            font-size: 11px;
+            cursor: pointer;
+            color: white;
+            margin-right: 4px;
+        }
+        .popup-btn-edit {
+            background: #0079ff;
+        }
+        .popup-btn-edit:hover {
+            background: #005fc4;
+        }
+        .popup-btn-delete {
+            background: #e74c3c;
+        }
+        .popup-btn-delete:hover {
+            background: #c0392b;
         }
 
         /* Measure tool */
@@ -432,6 +472,207 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         #loading p { color: #555; font-size: 14px; }
+
+        /* ========== EDIT MODE STYLES ========== */
+        .edit-mode-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .edit-btn {
+            padding: 6px 10px;
+            border: 2px solid;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s;
+            background: white;
+        }
+        .edit-btn:hover {
+            filter: brightness(0.95);
+        }
+        .edit-btn-elim {
+            border-color: #e74c3c;
+            color: #e74c3c;
+        }
+        .edit-btn-elim.active {
+            background: #e74c3c;
+            color: white;
+        }
+        .edit-btn-ins {
+            border-color: #006400;
+            color: #006400;
+        }
+        .edit-btn-ins.active {
+            background: #006400;
+            color: white;
+        }
+        .edit-btn-point {
+            border-color: #888;
+            color: #555;
+            font-size: 11px;
+            padding: 4px 10px;
+        }
+        .edit-btn-point.active-elim {
+            border-color: #e74c3c;
+            background: #fdecea;
+            color: #e74c3c;
+        }
+        .edit-btn-point.active-ins {
+            border-color: #006400;
+            background: #e8f5e9;
+            color: #006400;
+        }
+        .edit-btn-icon {
+            font-size: 14px;
+        }
+        .edit-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 6px;
+        }
+        .edit-action-btn {
+            flex: 1;
+            padding: 4px 6px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            text-align: center;
+            background: white;
+            color: #555;
+        }
+        .edit-action-btn:hover {
+            background: #f0f0f0;
+        }
+        .edit-counter {
+            font-size: 11px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .edit-counter span {
+            font-weight: 700;
+        }
+        .edit-mode-banner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 999;
+            padding: 8px 16px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            display: none;
+            pointer-events: none;
+        }
+        .edit-mode-banner.visible {
+            display: block;
+        }
+        .edit-mode-banner.mode-elim {
+            background: rgba(231,76,60,0.9);
+        }
+        .edit-mode-banner.mode-ins {
+            background: rgba(0,100,0,0.9);
+        }
+
+        /* Notes modal */
+        .notes-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .notes-modal-overlay.visible {
+            display: flex;
+        }
+        .notes-modal {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            padding: 20px;
+            width: 400px;
+            max-width: 90vw;
+        }
+        .notes-modal h3 {
+            font-size: 15px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .notes-modal .modal-road-name {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 12px;
+            font-style: italic;
+        }
+        .notes-modal .modal-type-badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 3px;
+            color: white;
+            margin-bottom: 10px;
+        }
+        .notes-modal textarea {
+            width: 100%;
+            height: 100px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 13px;
+            resize: vertical;
+        }
+        .notes-modal textarea:focus {
+            outline: none;
+            border-color: #0079ff;
+            box-shadow: 0 0 0 2px rgba(0,121,255,0.2);
+        }
+        .notes-modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .modal-btn {
+            padding: 7px 18px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .modal-btn-cancel {
+            background: #eee;
+            color: #555;
+        }
+        .modal-btn-cancel:hover {
+            background: #ddd;
+        }
+        .modal-btn-save {
+            background: #0079ff;
+            color: white;
+        }
+        .modal-btn-save:hover {
+            background: #005fc4;
+        }
+
+        /* Edit mode cursor */
+        .map-edit-cursor {
+            cursor: crosshair !important;
+        }
+        .map-edit-cursor .leaflet-interactive {
+            cursor: crosshair !important;
+        }
     </style>
 </head>
 <body>
@@ -441,6 +682,7 @@
     </div>
 
     <div id="map-container">
+        <div id="edit-mode-banner" class="edit-mode-banner"></div>
         <div id="map"></div>
 
         <div class="control-panel">
@@ -513,19 +755,41 @@
             <div class="control-section">
                 <h3>Proposte di Modifica</h3>
                 <div class="layer-toggle">
-                    <input type="checkbox" id="toggle-proposte-elim">
+                    <input type="checkbox" id="toggle-proposte-elim" checked>
                     <label for="toggle-proposte-elim">Proposte Eliminazioni</label>
                 </div>
-                <div class="legend-block" id="legend-proposte-elim" style="display:none">
+                <div class="legend-block" id="legend-proposte-elim">
                     <div class="legend-item"><span class="legend-line-dashed" style="border-color:#e74c3c"></span> Eliminazioni (da rete)</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#e74c3c"></span> Punto Eliminazione</div>
                 </div>
                 <div class="layer-toggle">
-                    <input type="checkbox" id="toggle-proposte-ins">
+                    <input type="checkbox" id="toggle-proposte-ins" checked>
                     <label for="toggle-proposte-ins">Proposte Inserimenti</label>
                 </div>
-                <div class="legend-block" id="legend-proposte-ins" style="display:none">
-                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#8e44ad"></span> Inserimenti (in rete)</div>
+                <div class="legend-block" id="legend-proposte-ins">
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#006400"></span> Inserimenti (in rete)</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#006400"></span> Punto Inserimento</div>
                 </div>
+
+                <!-- Edit mode buttons -->
+                <div class="edit-mode-buttons">
+                    <button class="edit-btn edit-btn-elim" id="btn-edit-elim">
+                        <span class="edit-btn-icon">&#10060;</span> Aggiungi Eliminazione
+                    </button>
+                    <button class="edit-btn edit-btn-ins" id="btn-edit-ins">
+                        <span class="edit-btn-icon">&#10004;</span> Aggiungi Inserimento
+                    </button>
+                    <button class="edit-btn edit-btn-point" id="btn-edit-point">
+                        <span class="edit-btn-icon">&#128205;</span> Aggiungi Punto
+                    </button>
+                </div>
+                <div class="edit-counter" id="edit-counter"></div>
+                <div class="edit-actions">
+                    <button class="edit-action-btn" id="btn-export-proposte" title="Esporta proposte come JSON">Esporta</button>
+                    <button class="edit-action-btn" id="btn-import-proposte" title="Importa proposte da JSON">Importa</button>
+                    <button class="edit-action-btn" id="btn-clear-proposte" title="Cancella tutte le proposte">Cancella Tutto</button>
+                </div>
+                <input type="file" id="import-file" accept=".json" style="display:none">
             </div>
         </div>
     </div>
@@ -543,6 +807,23 @@
             <button class="tab-btn" data-tab="tab2">Tabella 2 - Flussi Elevati (Fuori Rete)</button>
         </div>
         <div id="tab-content"></div>
+    </div>
+
+    <!-- Notes Modal -->
+    <div class="notes-modal-overlay" id="notes-modal-overlay">
+        <div class="notes-modal">
+            <h3 id="modal-title">Aggiungi Proposta</h3>
+            <div class="modal-road-name" id="modal-road-name"></div>
+            <div id="modal-type-badge" class="modal-type-badge"></div>
+            <div style="margin-top:8px">
+                <label style="font-size:12px;color:#666;font-weight:600;">Note:</label>
+                <textarea id="modal-notes" placeholder="Inserisci le note per questa proposta..."></textarea>
+            </div>
+            <div class="notes-modal-actions">
+                <button class="modal-btn modal-btn-cancel" id="modal-cancel">Annulla</button>
+                <button class="modal-btn modal-btn-save" id="modal-save">Salva</button>
+            </div>
+        </div>
     </div>
 
     <!-- Leaflet JS -->
@@ -563,6 +844,12 @@
 
     <script>
     (function() {
+        // =====================================================
+        // COLORS
+        // =====================================================
+        var COLOR_ELIM = '#e74c3c';
+        var COLOR_INS = '#006400';
+
         // =====================================================
         // MAP INITIALIZATION
         // =====================================================
@@ -709,121 +996,439 @@
         }
 
         // =====================================================
-        // CREATE LAYERS - Traffic flows UNDER road network
+        // CREATE LAYERS
         // =====================================================
-
-        // 1. Municipi layer (base) - NO popup (Change #2)
         var layerMunicipii = L.geoJSON(json_Municipi_1, {
             style: defaultMunicipiStyle
         }).addTo(map);
 
-        // 2. Low traffic flows (UNDER road network)
         var layerLowTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_3, {
             style: styleLowTraffic,
             onEachFeature: popupLowTraffic
         }).addTo(map);
 
-        // 3. High traffic flows (UNDER road network)
         var layerHighTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_2, {
             style: styleHighTraffic,
             onEachFeature: popupHighTraffic
         }).addTo(map);
 
-        // 4. PGTU road network (ON TOP of traffic flows)
         var layerPGTU = L.geoJSON(json_PGTUAnnessoD_5, {
             style: stylePGTU,
             onEachFeature: popupPGTU
         }).addTo(map);
 
-        // =====================================================
-        // PROPOSTE LAYERS (Change #6)
-        // =====================================================
-        function collectProposteNames(proposteObj) {
-            var names = [];
-            for (var mun in proposteObj) {
-                if (proposteObj.hasOwnProperty(mun)) {
-                    proposteObj[mun].forEach(function(name) {
-                        names.push(name.trim().toLowerCase());
-                    });
-                }
-            }
-            return names;
-        }
-
-        var elimNames = (typeof proposteEliminazioni !== 'undefined') ? collectProposteNames(proposteEliminazioni) : [];
-        var insNames = (typeof proposteInserimenti !== 'undefined') ? collectProposteNames(proposteInserimenti) : [];
-
-        function roadNameMatchesProposte(featureProps, namesList, layerType) {
-            if (namesList.length === 0) return false;
-            var featureName;
-            if (layerType === 'low') {
-                featureName = (featureProps['Nome Strad'] || featureProps.Toponomast || '').trim().toLowerCase();
-            } else {
-                featureName = (featureProps['Nome Strada'] || featureProps.Toponomastica || '').trim().toLowerCase();
-            }
-            if (!featureName) return false;
-            for (var i = 0; i < namesList.length; i++) {
-                if (featureName === namesList[i] || featureName.indexOf(namesList[i]) !== -1 || namesList[i].indexOf(featureName) !== -1) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Build elimination layer from low traffic features
-        var elimFeatures = [];
-        layerLowTraffic.eachLayer(function(layer) {
-            if (roadNameMatchesProposte(layer.feature.properties, elimNames, 'low')) {
-                elimFeatures.push(layer.feature);
-            }
-        });
-        var layerProposteElim = L.geoJSON({ type: 'FeatureCollection', features: elimFeatures }, {
-            style: function() {
-                return { color: '#e74c3c', weight: 5, opacity: 0.9, dashArray: '10,6', lineCap: 'butt', lineJoin: 'bevel' };
-            },
-            onEachFeature: function(feature, layer) {
-                var p = feature.properties;
-                var name = p['Nome Strad'] || p.Toponomast || 'N/D';
-                var html = '<div class="popup-title">' + name + '</div>';
-                html += '<span class="popup-layer-badge" style="background:#e74c3c;">Proposta Eliminazione</span>';
-                html += '<table class="popup-table">';
-                html += popupRow('Flussi Giornalieri', fmtNum(p['Flussi Gio']));
-                html += popupRow('Flusso Medio', fmtNum(p['Flusso Med']));
-                html += popupRow('Municipio', fmt(p.Municipio));
-                html += '</table>';
-                layer.bindPopup(html, { maxWidth: 340 });
-            }
-        });
-
-        // Build insertion layer from high traffic features
-        var insFeatures = [];
-        layerHighTraffic.eachLayer(function(layer) {
-            if (roadNameMatchesProposte(layer.feature.properties, insNames, 'high')) {
-                insFeatures.push(layer.feature);
-            }
-        });
-        var layerProposteIns = L.geoJSON({ type: 'FeatureCollection', features: insFeatures }, {
-            style: function() {
-                return { color: '#8e44ad', weight: 5, opacity: 0.9, dashArray: '10,6', lineCap: 'butt', lineJoin: 'bevel' };
-            },
-            onEachFeature: function(feature, layer) {
-                var p = feature.properties;
-                var name = p['Nome Strada'] || p.Toponomastica || 'N/D';
-                var html = '<div class="popup-title">' + name + '</div>';
-                html += '<span class="popup-layer-badge" style="background:#8e44ad;">Proposta Inserimento</span>';
-                html += '<table class="popup-table">';
-                html += popupRow('Flussi Giornalieri', fmtNum(p['Flussi Giornalieri']));
-                html += popupRow('Flusso Medio', fmtNum(p['Flusso Medio']));
-                html += popupRow('Municipio', fmt(p.Municipio));
-                html += '</table>';
-                layer.bindPopup(html, { maxWidth: 340 });
-            }
-        });
-
         // Fit map to data bounds
         try {
             map.fitBounds(layerMunicipii.getBounds(), { padding: [20, 20] });
         } catch(e) {}
+
+        // =====================================================
+        // MANUAL PROPOSTE SYSTEM (localStorage-based)
+        // =====================================================
+        var STORAGE_KEY = 'pgtu_proposte_manual';
+
+        // Layer groups for manual proposte
+        var manualElimGroup = L.layerGroup().addTo(map);
+        var manualInsGroup = L.layerGroup().addTo(map);
+
+        function loadProposte() {
+            try {
+                var data = localStorage.getItem(STORAGE_KEY);
+                return data ? JSON.parse(data) : [];
+            } catch(e) { return []; }
+        }
+
+        function saveProposte(proposte) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(proposte));
+            } catch(e) {}
+        }
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+        }
+
+        // Build popup HTML for a manual proposta
+        function buildPropostaPopup(proposta) {
+            var isElim = proposta.type === 'eliminazione';
+            var color = isElim ? COLOR_ELIM : COLOR_INS;
+            var label = isElim ? 'Proposta Eliminazione' : 'Proposta Inserimento';
+            var html = '<div class="popup-title">' + (proposta.name || 'Punto Proposta') + '</div>';
+            html += '<span class="popup-layer-badge" style="background:' + color + ';">' + label + '</span>';
+            if (proposta.source) {
+                html += '<table class="popup-table">';
+                html += popupRow('Fonte', proposta.source);
+                if (proposta.flussi) html += popupRow('Flussi Giornalieri', proposta.flussi);
+                if (proposta.municipio) html += popupRow('Municipio', proposta.municipio);
+                html += '</table>';
+            }
+            if (proposta.notes) {
+                html += '<div class="popup-notes">' + proposta.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+            }
+            html += '<div style="margin-top:8px">';
+            html += '<button class="popup-btn popup-btn-edit" onclick="window._pgtuEditNote(\'' + proposta.id + '\')">Modifica Note</button>';
+            html += '<button class="popup-btn popup-btn-delete" onclick="window._pgtuDeleteProposta(\'' + proposta.id + '\')">Elimina</button>';
+            html += '</div>';
+            return html;
+        }
+
+        // Render all proposte from storage onto map
+        function renderProposte() {
+            manualElimGroup.clearLayers();
+            manualInsGroup.clearLayers();
+            var proposte = loadProposte();
+
+            proposte.forEach(function(p) {
+                var isElim = p.type === 'eliminazione';
+                var color = isElim ? COLOR_ELIM : COLOR_INS;
+                var group = isElim ? manualElimGroup : manualInsGroup;
+                var popupHtml = buildPropostaPopup(p);
+
+                if (p.geometry && p.geometry.type === 'Point') {
+                    // Point marker
+                    var latlng = [p.geometry.coordinates[1], p.geometry.coordinates[0]];
+                    var marker = L.circleMarker(latlng, {
+                        radius: 9,
+                        color: color,
+                        fillColor: color,
+                        fillOpacity: 0.7,
+                        weight: 3,
+                        opacity: 1
+                    });
+                    marker.bindPopup(popupHtml, { maxWidth: 340 });
+                    group.addLayer(marker);
+                } else if (p.geometry) {
+                    // Line geometry (copied from existing road)
+                    var geoLayer = L.geoJSON(p.geometry, {
+                        style: function() {
+                            return {
+                                color: color,
+                                weight: 8,
+                                opacity: 0.9,
+                                dashArray: '12,8',
+                                lineCap: 'butt',
+                                lineJoin: 'bevel'
+                            };
+                        }
+                    });
+                    geoLayer.eachLayer(function(layer) {
+                        layer.bindPopup(popupHtml, { maxWidth: 340 });
+                    });
+                    group.addLayer(geoLayer);
+                }
+            });
+
+            updateProposteCounter();
+        }
+
+        function updateProposteCounter() {
+            var proposte = loadProposte();
+            var elimCount = proposte.filter(function(p) { return p.type === 'eliminazione'; }).length;
+            var insCount = proposte.filter(function(p) { return p.type === 'inserimento'; }).length;
+            var el = document.getElementById('edit-counter');
+            if (elimCount + insCount > 0) {
+                el.innerHTML = 'Proposte salvate: <span style="color:' + COLOR_ELIM + '">' + elimCount + ' Elim.</span> | <span style="color:' + COLOR_INS + '">' + insCount + ' Ins.</span>';
+            } else {
+                el.textContent = '';
+            }
+        }
+
+        // Global functions for popup buttons
+        window._pgtuDeleteProposta = function(id) {
+            var proposte = loadProposte();
+            proposte = proposte.filter(function(p) { return p.id !== id; });
+            saveProposte(proposte);
+            map.closePopup();
+            renderProposte();
+        };
+
+        window._pgtuEditNote = function(id) {
+            var proposte = loadProposte();
+            var proposta = null;
+            for (var i = 0; i < proposte.length; i++) {
+                if (proposte[i].id === id) { proposta = proposte[i]; break; }
+            }
+            if (!proposta) return;
+            map.closePopup();
+            showNotesModal(proposta.type, proposta.name || 'Punto', function(notes) {
+                proposta.notes = notes;
+                saveProposte(proposte);
+                renderProposte();
+            }, proposta.notes || '');
+        };
+
+        // =====================================================
+        // NOTES MODAL
+        // =====================================================
+        var modalOverlay = document.getElementById('notes-modal-overlay');
+        var modalNotes = document.getElementById('modal-notes');
+        var modalCallback = null;
+
+        function showNotesModal(type, roadName, callback, existingNotes) {
+            var isElim = type === 'eliminazione';
+            document.getElementById('modal-title').textContent = existingNotes !== undefined && existingNotes !== '' ? 'Modifica Note' : 'Aggiungi Proposta';
+            document.getElementById('modal-road-name').textContent = roadName;
+            var badge = document.getElementById('modal-type-badge');
+            badge.textContent = isElim ? 'Eliminazione' : 'Inserimento';
+            badge.style.background = isElim ? COLOR_ELIM : COLOR_INS;
+            modalNotes.value = existingNotes || '';
+            modalCallback = callback;
+            modalOverlay.classList.add('visible');
+            setTimeout(function() { modalNotes.focus(); }, 50);
+        }
+
+        document.getElementById('modal-save').addEventListener('click', function() {
+            if (modalCallback) modalCallback(modalNotes.value);
+            modalOverlay.classList.remove('visible');
+            modalCallback = null;
+        });
+
+        document.getElementById('modal-cancel').addEventListener('click', function() {
+            modalOverlay.classList.remove('visible');
+            modalCallback = null;
+        });
+
+        modalOverlay.addEventListener('click', function(e) {
+            if (e.target === modalOverlay) {
+                modalOverlay.classList.remove('visible');
+                modalCallback = null;
+            }
+        });
+
+        // =====================================================
+        // EDIT MODE STATE MACHINE
+        // =====================================================
+        // editMode: null | 'eliminazione' | 'inserimento'
+        // pointMode: true/false (when true, clicks add point markers instead of selecting roads)
+        var editMode = null;
+        var pointMode = false;
+
+        var btnEditElim = document.getElementById('btn-edit-elim');
+        var btnEditIns = document.getElementById('btn-edit-ins');
+        var btnEditPoint = document.getElementById('btn-edit-point');
+        var banner = document.getElementById('edit-mode-banner');
+
+        function setEditMode(mode) {
+            // If same mode, toggle off
+            if (editMode === mode) {
+                editMode = null;
+                pointMode = false;
+            } else {
+                editMode = mode;
+                pointMode = false;
+            }
+            updateEditUI();
+        }
+
+        function togglePointMode() {
+            if (!editMode) return;
+            pointMode = !pointMode;
+            updateEditUI();
+        }
+
+        function updateEditUI() {
+            // Buttons
+            btnEditElim.classList.toggle('active', editMode === 'eliminazione');
+            btnEditIns.classList.toggle('active', editMode === 'inserimento');
+
+            // Point button
+            btnEditPoint.classList.remove('active-elim', 'active-ins');
+            if (editMode && pointMode) {
+                btnEditPoint.classList.add(editMode === 'eliminazione' ? 'active-elim' : 'active-ins');
+            }
+
+            // Banner
+            banner.classList.remove('visible', 'mode-elim', 'mode-ins');
+            if (editMode) {
+                banner.classList.add('visible');
+                if (editMode === 'eliminazione') {
+                    banner.classList.add('mode-elim');
+                    banner.textContent = pointMode
+                        ? 'MODO PUNTO ELIMINAZIONE - Clicca sulla mappa per aggiungere un punto'
+                        : 'MODO ELIMINAZIONE - Clicca su una strada per aggiungerla come proposta di eliminazione';
+                } else {
+                    banner.classList.add('mode-ins');
+                    banner.textContent = pointMode
+                        ? 'MODO PUNTO INSERIMENTO - Clicca sulla mappa per aggiungere un punto'
+                        : 'MODO INSERIMENTO - Clicca su una strada per aggiungerla come proposta di inserimento';
+                }
+            }
+
+            // Cursor
+            var mapEl = map.getContainer();
+            if (editMode) {
+                mapEl.classList.add('map-edit-cursor');
+            } else {
+                mapEl.classList.remove('map-edit-cursor');
+            }
+        }
+
+        btnEditElim.addEventListener('click', function() { setEditMode('eliminazione'); });
+        btnEditIns.addEventListener('click', function() { setEditMode('inserimento'); });
+        btnEditPoint.addEventListener('click', function() { togglePointMode(); });
+
+        // Escape key exits edit mode
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                if (modalOverlay.classList.contains('visible')) {
+                    modalOverlay.classList.remove('visible');
+                    modalCallback = null;
+                } else if (editMode) {
+                    editMode = null;
+                    pointMode = false;
+                    updateEditUI();
+                }
+            }
+        });
+
+        // =====================================================
+        // EDIT MODE: CLICK ON EXISTING ROAD
+        // =====================================================
+        function getRoadName(featureProps, layerType) {
+            if (layerType === 'pgtu') return featureProps.Toponomast || featureProps.Nome || '';
+            if (layerType === 'low') return featureProps['Nome Strad'] || featureProps.Toponom || featureProps.Toponomast || '';
+            if (layerType === 'high') return featureProps['Nome Strada'] || featureProps.Toponomastica || featureProps.Toponom || '';
+            return '';
+        }
+
+        function handleEditClick(e, feature, layerType) {
+            if (!editMode || pointMode) return;
+
+            L.DomEvent.stopPropagation(e);
+
+            var props = feature.properties;
+            var roadName = getRoadName(props, layerType) || 'Strada senza nome';
+            var flussi = '';
+            var municipio = props.Municipio || '';
+            if (layerType === 'low') flussi = fmtNum(props['Flussi Gio']) || '';
+            else if (layerType === 'high') flussi = fmtNum(props['Flussi Giornalieri']) || '';
+
+            var geometry = feature.geometry;
+            var currentEditMode = editMode;
+
+            showNotesModal(currentEditMode, roadName, function(notes) {
+                var proposta = {
+                    id: generateId(),
+                    type: currentEditMode,
+                    name: roadName,
+                    source: layerType === 'pgtu' ? 'PGTU Annesso D' : layerType === 'low' ? 'Flussi Bassi (Tab. 1)' : 'Flussi Elevati (Tab. 2)',
+                    flussi: flussi,
+                    municipio: municipio,
+                    notes: notes,
+                    geometry: geometry,
+                    created: new Date().toISOString()
+                };
+                var proposte = loadProposte();
+                proposte.push(proposta);
+                saveProposte(proposte);
+                renderProposte();
+            });
+        }
+
+        // Attach edit-mode-aware click handlers to all road layers
+        function attachEditClickHandlers(geoLayer, layerType) {
+            geoLayer.eachLayer(function(layer) {
+                layer.on('click', function(e) {
+                    if (editMode && !pointMode) {
+                        handleEditClick(e, layer.feature, layerType);
+                    }
+                    // If not in edit mode, normal popup behavior works via bindPopup
+                });
+            });
+        }
+
+        attachEditClickHandlers(layerPGTU, 'pgtu');
+        attachEditClickHandlers(layerLowTraffic, 'low');
+        attachEditClickHandlers(layerHighTraffic, 'high');
+
+        // =====================================================
+        // EDIT MODE: POINT MARKERS (click on map)
+        // =====================================================
+        map.on('click', function(e) {
+            if (!editMode || !pointMode) return;
+
+            var latlng = e.latlng;
+            var currentEditMode = editMode;
+
+            showNotesModal(currentEditMode, 'Lat: ' + latlng.lat.toFixed(5) + ', Lon: ' + latlng.lng.toFixed(5), function(notes) {
+                var proposta = {
+                    id: generateId(),
+                    type: currentEditMode,
+                    name: 'Punto ' + (currentEditMode === 'eliminazione' ? 'Eliminazione' : 'Inserimento'),
+                    source: 'Punto manuale',
+                    flussi: '',
+                    municipio: '',
+                    notes: notes,
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [latlng.lng, latlng.lat]
+                    },
+                    created: new Date().toISOString()
+                };
+                var proposte = loadProposte();
+                proposte.push(proposta);
+                saveProposte(proposte);
+                renderProposte();
+            });
+        });
+
+        // =====================================================
+        // EXPORT / IMPORT / CLEAR
+        // =====================================================
+        document.getElementById('btn-export-proposte').addEventListener('click', function() {
+            var proposte = loadProposte();
+            if (proposte.length === 0) { alert('Nessuna proposta da esportare.'); return; }
+            var blob = new Blob([JSON.stringify(proposte, null, 2)], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'pgtu_proposte_' + new Date().toISOString().slice(0,10) + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        var importFileInput = document.getElementById('import-file');
+        document.getElementById('btn-import-proposte').addEventListener('click', function() {
+            importFileInput.click();
+        });
+        importFileInput.addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    var imported = JSON.parse(ev.target.result);
+                    if (!Array.isArray(imported)) throw new Error('Formato non valido');
+                    var existing = loadProposte();
+                    // Assign new IDs to avoid conflicts
+                    imported.forEach(function(p) {
+                        p.id = generateId();
+                        existing.push(p);
+                    });
+                    saveProposte(existing);
+                    renderProposte();
+                    alert('Importate ' + imported.length + ' proposte.');
+                } catch(err) {
+                    alert('Errore importazione: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            importFileInput.value = '';
+        });
+
+        document.getElementById('btn-clear-proposte').addEventListener('click', function() {
+            var proposte = loadProposte();
+            if (proposte.length === 0) return;
+            if (confirm('Cancellare tutte le ' + proposte.length + ' proposte salvate?')) {
+                saveProposte([]);
+                renderProposte();
+            }
+        });
+
+        // =====================================================
+        // INITIAL RENDER OF SAVED PROPOSTE
+        // =====================================================
+        renderProposte();
 
         // =====================================================
         // POPULATE MUNICIPI DROPDOWN
@@ -847,7 +1452,7 @@
         });
 
         // =====================================================
-        // ROAD SEARCH (with OSM Nominatim - Change #5)
+        // ROAD SEARCH (with OSM Nominatim)
         // =====================================================
         var searchInput = document.getElementById('road-search');
         var searchResults = document.getElementById('search-results');
@@ -890,7 +1495,6 @@
                 return;
             }
             searchTimeout = setTimeout(function() {
-                // Local search
                 var localMatches = [];
                 for (var i = 0; i < searchIndex.length && localMatches.length < 20; i++) {
                     if (searchIndex[i].name.toLowerCase().indexOf(query) !== -1) {
@@ -909,7 +1513,6 @@
                 searchResults.innerHTML = html;
                 if (html) searchResults.style.display = 'block';
 
-                // OSM Nominatim search (Change #5)
                 if (query.length >= 3) {
                     clearTimeout(nominatimTimeout);
                     nominatimTimeout = setTimeout(function() {
@@ -942,7 +1545,6 @@
             var item = e.target.closest('.search-result-item');
             if (!item) return;
 
-            // OSM result
             var osmLat = item.getAttribute('data-osm-lat');
             var osmLon = item.getAttribute('data-osm-lon');
             if (osmLat && osmLon) {
@@ -956,7 +1558,6 @@
                 return;
             }
 
-            // Local result
             var idx = parseInt(item.getAttribute('data-idx'));
             var match = searchIndex[idx];
             if (match && match.layer) {
@@ -985,7 +1586,7 @@
         });
 
         // =====================================================
-        // FIND AND ZOOM TO ROAD (Change #4)
+        // FIND AND ZOOM TO ROAD
         // =====================================================
         function findAndZoomToRoad(roadName, layerType) {
             if (!roadName) return;
@@ -1038,7 +1639,6 @@
             }
         }
 
-        // Click handler for road links in tables
         document.getElementById('tab-content').addEventListener('click', function(e) {
             var link = e.target.closest('.road-link');
             if (!link) return;
@@ -1128,7 +1728,7 @@
         });
 
         // =====================================================
-        // RESIZABLE TABLE PANEL (Change #1)
+        // RESIZABLE TABLE PANEL
         // =====================================================
         var resizeHandle = document.getElementById('resize-handle');
         var isDragging = false;
@@ -1225,7 +1825,6 @@
             layerMunicipii.eachLayer(function(layer) { layer.setStyle(defaultMunicipiStyle); });
         });
 
-        // Tab switching
         document.getElementById('tab-buttons').addEventListener('click', function(e) {
             var btn = e.target.closest('.tab-btn');
             if (!btn) return;
@@ -1253,13 +1852,13 @@
                 statsHtml += '<div class="stat-box"><div class="stat-value">' + Math.round(avg2).toLocaleString('it-IT') + '</div><div class="stat-label">Flusso Medio Tab.2<br>(veicoli/giorno)</div></div>';
             }
 
-            // Proposte stats (Change #6)
-            var elimCount = 0, insCount = 0;
-            if (typeof proposteEliminazioni !== 'undefined' && proposteEliminazioni[munNum]) elimCount = proposteEliminazioni[munNum].length;
-            if (typeof proposteInserimenti !== 'undefined' && proposteInserimenti[munNum]) insCount = proposteInserimenti[munNum].length;
+            // Proposte stats from localStorage
+            var proposte = loadProposte();
+            var elimCount = proposte.filter(function(p) { return p.type === 'eliminazione'; }).length;
+            var insCount = proposte.filter(function(p) { return p.type === 'inserimento'; }).length;
             if (elimCount > 0 || insCount > 0) {
-                statsHtml += '<div class="stat-box"><div class="stat-value" style="color:#e74c3c">' + elimCount + '</div><div class="stat-label">Proposte<br>Eliminazione</div></div>';
-                statsHtml += '<div class="stat-box"><div class="stat-value" style="color:#8e44ad">' + insCount + '</div><div class="stat-label">Proposte<br>Inserimento</div></div>';
+                statsHtml += '<div class="stat-box"><div class="stat-value" style="color:' + COLOR_ELIM + '">' + elimCount + '</div><div class="stat-label">Proposte<br>Eliminazione</div></div>';
+                statsHtml += '<div class="stat-box"><div class="stat-value" style="color:' + COLOR_INS + '">' + insCount + '</div><div class="stat-label">Proposte<br>Inserimento</div></div>';
             }
 
             document.getElementById('table-stats').innerHTML = statsHtml;
@@ -1324,7 +1923,6 @@
             return Math.round(n).toLocaleString('it-IT');
         }
 
-        // Auto-switch tab based on traffic layer toggle
         document.getElementById('toggle-low-traffic').addEventListener('change', function() {
             if (this.checked && !document.getElementById('toggle-high-traffic').checked) setActiveTab('tab1');
         });
@@ -1344,8 +1942,8 @@
         // LAYER TOGGLE HANDLERS
         // =====================================================
         function bringProposteFront() {
-            if (map.hasLayer(layerProposteElim)) layerProposteElim.bringToFront();
-            if (map.hasLayer(layerProposteIns)) layerProposteIns.bringToFront();
+            manualElimGroup.bringToFront();
+            manualInsGroup.bringToFront();
         }
 
         document.getElementById('toggle-pgtu').addEventListener('change', function() {
@@ -1383,25 +1981,24 @@
             }
         });
 
-        // Proposte toggle handlers (Change #6)
         document.getElementById('toggle-proposte-elim').addEventListener('change', function() {
             if (this.checked) {
-                map.addLayer(layerProposteElim);
-                layerProposteElim.bringToFront();
+                map.addLayer(manualElimGroup);
+                manualElimGroup.bringToFront();
                 document.getElementById('legend-proposte-elim').style.display = '';
             } else {
-                map.removeLayer(layerProposteElim);
+                map.removeLayer(manualElimGroup);
                 document.getElementById('legend-proposte-elim').style.display = 'none';
             }
         });
 
         document.getElementById('toggle-proposte-ins').addEventListener('change', function() {
             if (this.checked) {
-                map.addLayer(layerProposteIns);
-                layerProposteIns.bringToFront();
+                map.addLayer(manualInsGroup);
+                manualInsGroup.bringToFront();
                 document.getElementById('legend-proposte-ins').style.display = '';
             } else {
-                map.removeLayer(layerProposteIns);
+                map.removeLayer(manualInsGroup);
                 document.getElementById('legend-proposte-ins').style.display = 'none';
             }
         });
