@@ -7,26 +7,59 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        html, body { width: 100%; height: 100%; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        body { display: flex; flex-direction: column; }
 
-        /* Layout: map on top, table panel below */
+        /* Layout: map on top, resize handle, table panel below */
         #map-container {
             width: 100%;
             height: 100%;
             position: relative;
+            flex-shrink: 0;
         }
         #map-container.with-table {
             height: 55%;
         }
         #map { width: 100%; height: 100%; }
 
+        /* Resize handle */
+        #resize-handle {
+            width: 100%;
+            height: 7px;
+            background: #0079ff;
+            cursor: ns-resize;
+            display: none;
+            position: relative;
+            z-index: 500;
+            flex-shrink: 0;
+        }
+        #resize-handle:hover,
+        #resize-handle.dragging {
+            background: #005fc4;
+        }
+        #resize-handle::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 3px;
+            border-top: 1px solid rgba(255,255,255,0.6);
+            border-bottom: 1px solid rgba(255,255,255,0.6);
+        }
+        #resize-handle.visible {
+            display: block;
+        }
+
+        /* Table panel */
         #table-panel {
             display: none;
             width: 100%;
-            height: 45%;
+            flex: 1;
+            min-height: 0;
             overflow-y: auto;
             background: #f8f9fa;
-            border-top: 3px solid #0079ff;
             padding: 16px 24px;
         }
         #table-panel.visible {
@@ -83,14 +116,6 @@
             cursor: pointer;
             flex: 1;
         }
-        .color-swatch {
-            display: inline-block;
-            width: 20px;
-            height: 4px;
-            margin-right: 6px;
-            vertical-align: middle;
-            border-radius: 2px;
-        }
 
         /* Municipi selector */
         #municipio-select {
@@ -134,7 +159,7 @@
             border: 1px solid #ccc;
             border-top: none;
             border-radius: 0 0 4px 4px;
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
             z-index: 1001;
             display: none;
@@ -154,6 +179,21 @@
             color: #888;
             margin-left: 4px;
         }
+        .search-separator {
+            padding: 4px 8px;
+            font-size: 10px;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #eee;
+            cursor: default;
+        }
+        .search-result-item .result-source {
+            font-size: 10px;
+            color: #0079ff;
+            margin-left: 4px;
+        }
 
         /* Legend sections */
         .legend-item {
@@ -168,6 +208,13 @@
             height: 3px;
             margin-right: 6px;
             border-radius: 1px;
+            flex-shrink: 0;
+        }
+        .legend-line-dashed {
+            width: 24px;
+            height: 0;
+            margin-right: 6px;
+            border-top: 3px dashed;
             flex-shrink: 0;
         }
         .legend-block {
@@ -247,6 +294,18 @@
             white-space: nowrap;
         }
 
+        /* Road links in tables */
+        .road-link {
+            color: #0079ff;
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+        }
+        .road-link:hover {
+            color: #005fc4;
+            text-decoration-style: solid;
+        }
+
         /* Table panel styles */
         #table-panel h3 {
             font-size: 16px;
@@ -268,6 +327,7 @@
             display: flex;
             gap: 16px;
             flex-wrap: wrap;
+            margin-bottom: 12px;
         }
         .stat-box {
             background: white;
@@ -426,11 +486,11 @@
                     <label for="toggle-low-traffic">Flussi Bassi (Rete Principale)</label>
                 </div>
                 <div class="legend-block" id="legend-low">
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(0,138,10)"></span> 101 - 2,200</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(64,167,72)"></span> 2,200 - 4,159</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(128,197,133)"></span> 4,159 - 6,814</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(191,226,194)"></span> 6,814 - 15,638</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(220,220,220)"></span> 15,638 - 57,833</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(0,138,10)"></span> 100 - 2,200</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(64,167,72)"></span> 2,200 - 4,160</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(128,197,133)"></span> 4,160 - 6,810</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(191,226,194)"></span> 6,810 - 15,640</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(220,220,220)"></span> 15,640 - 57,830</div>
                 </div>
 
                 <div class="layer-toggle" style="margin-top: 8px;">
@@ -438,18 +498,39 @@
                     <label for="toggle-high-traffic">Flussi Elevati (Fuori Rete)</label>
                 </div>
                 <div class="legend-block" id="legend-high">
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(255,90,90)"></span> 5,002 - 5,822</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(239,78,77)"></span> 5,822 - 6,837</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(222,65,64)"></span> 6,837 - 7,784</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(206,52,52)"></span> 7,784 - 8,970</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(189,40,39)"></span> 8,970 - 10,982</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(173,27,26)"></span> 10,982 - 14,485</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(156,15,13)"></span> 14,485 - 22,268</div>
-                    <div class="legend-item"><span class="legend-line" style="background:rgb(140,2,0)"></span> 22,268 - 77,503</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(255,90,90)"></span> 5,000 - 5,820</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(239,78,77)"></span> 5,820 - 6,840</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(222,65,64)"></span> 6,840 - 7,780</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(206,52,52)"></span> 7,780 - 8,970</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(189,40,39)"></span> 8,970 - 10,980</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(173,27,26)"></span> 10,980 - 14,490</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(156,15,13)"></span> 14,490 - 22,270</div>
+                    <div class="legend-item"><span class="legend-line" style="background:rgb(140,2,0)"></span> 22,270 - 77,500</div>
+                </div>
+            </div>
+
+            <!-- Proposte di Modifica -->
+            <div class="control-section">
+                <h3>Proposte di Modifica</h3>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-proposte-elim">
+                    <label for="toggle-proposte-elim">Proposte Eliminazioni</label>
+                </div>
+                <div class="legend-block" id="legend-proposte-elim" style="display:none">
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#e74c3c"></span> Eliminazioni (da rete)</div>
+                </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-proposte-ins">
+                    <label for="toggle-proposte-ins">Proposte Inserimenti</label>
+                </div>
+                <div class="legend-block" id="legend-proposte-ins" style="display:none">
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#8e44ad"></span> Inserimenti (in rete)</div>
                 </div>
             </div>
         </div>
     </div>
+
+    <div id="resize-handle"></div>
 
     <div id="table-panel">
         <div class="table-header">
@@ -477,6 +558,9 @@
     <script src="data_tabella1.js"></script>
     <script src="data_tabella2.js"></script>
 
+    <!-- Proposte data -->
+    <script src="data_proposte.js"></script>
+
     <script>
     (function() {
         // =====================================================
@@ -488,7 +572,6 @@
             zoomControl: true
         });
 
-        // Base tile layer
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; OpenStreetMap contributors',
             maxZoom: 19
@@ -497,8 +580,6 @@
         // =====================================================
         // STYLE FUNCTIONS
         // =====================================================
-
-        // Road classification colors (PGTU Annesso D)
         var classificaColors = {
             'A':  '#000000',
             'S':  '#007bff',
@@ -515,10 +596,7 @@
             var classifica = feature.properties.Classifica || feature.properties.classifica || '';
             return {
                 color: classificaColors[classifica] || '#888888',
-                weight: 2.5,
-                opacity: 1,
-                lineCap: 'square',
-                lineJoin: 'bevel'
+                weight: 2.5, opacity: 1, lineCap: 'square', lineJoin: 'bevel'
             };
         }
 
@@ -547,7 +625,6 @@
             return { color: color, weight: 4, opacity: 0.85, lineCap: 'square', lineJoin: 'bevel' };
         }
 
-        // Municipi styles
         var defaultMunicipiStyle = {
             color: 'rgba(0,0,0,0.35)', weight: 2,
             fillColor: 'rgba(0,121,255,0.15)', fillOpacity: 0.15
@@ -562,9 +639,8 @@
         };
 
         // =====================================================
-        // POPUP FUNCTIONS (detailed, like previous maps)
+        // POPUP FUNCTIONS
         // =====================================================
-
         function fmt(val) {
             if (val === null || val === undefined || val === '' || val === 'None' || val === 'null') return null;
             return val;
@@ -574,7 +650,6 @@
             if (isNaN(n)) return null;
             return Math.round(n).toLocaleString('it-IT');
         }
-
         function popupRow(label, value) {
             if (value === null || value === undefined) return '';
             return '<tr><th>' + label + '</th><td>' + value + '</td></tr>';
@@ -633,24 +708,13 @@
             layer.bindPopup(html, { maxWidth: 340 });
         }
 
-        function popupMunicipio(feature, layer) {
-            var p = feature.properties;
-            var html = '<div class="popup-title">' + (p.Name || 'Municipio ' + p.Attuale) + '</div>';
-            html += '<table class="popup-table">';
-            html += popupRow('Numero', p.Numero);
-            html += popupRow('Denominazione', p.Attuale);
-            html += '</table>';
-            layer.bindPopup(html, { maxWidth: 300 });
-        }
-
         // =====================================================
         // CREATE LAYERS - Traffic flows UNDER road network
         // =====================================================
 
-        // 1. Municipi layer (base)
+        // 1. Municipi layer (base) - NO popup (Change #2)
         var layerMunicipii = L.geoJSON(json_Municipi_1, {
-            style: defaultMunicipiStyle,
-            onEachFeature: popupMunicipio
+            style: defaultMunicipiStyle
         }).addTo(map);
 
         // 2. Low traffic flows (UNDER road network)
@@ -670,6 +734,91 @@
             style: stylePGTU,
             onEachFeature: popupPGTU
         }).addTo(map);
+
+        // =====================================================
+        // PROPOSTE LAYERS (Change #6)
+        // =====================================================
+        function collectProposteNames(proposteObj) {
+            var names = [];
+            for (var mun in proposteObj) {
+                if (proposteObj.hasOwnProperty(mun)) {
+                    proposteObj[mun].forEach(function(name) {
+                        names.push(name.trim().toLowerCase());
+                    });
+                }
+            }
+            return names;
+        }
+
+        var elimNames = (typeof proposteEliminazioni !== 'undefined') ? collectProposteNames(proposteEliminazioni) : [];
+        var insNames = (typeof proposteInserimenti !== 'undefined') ? collectProposteNames(proposteInserimenti) : [];
+
+        function roadNameMatchesProposte(featureProps, namesList, layerType) {
+            if (namesList.length === 0) return false;
+            var featureName;
+            if (layerType === 'low') {
+                featureName = (featureProps['Nome Strad'] || featureProps.Toponomast || '').trim().toLowerCase();
+            } else {
+                featureName = (featureProps['Nome Strada'] || featureProps.Toponomastica || '').trim().toLowerCase();
+            }
+            if (!featureName) return false;
+            for (var i = 0; i < namesList.length; i++) {
+                if (featureName === namesList[i] || featureName.indexOf(namesList[i]) !== -1 || namesList[i].indexOf(featureName) !== -1) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Build elimination layer from low traffic features
+        var elimFeatures = [];
+        layerLowTraffic.eachLayer(function(layer) {
+            if (roadNameMatchesProposte(layer.feature.properties, elimNames, 'low')) {
+                elimFeatures.push(layer.feature);
+            }
+        });
+        var layerProposteElim = L.geoJSON({ type: 'FeatureCollection', features: elimFeatures }, {
+            style: function() {
+                return { color: '#e74c3c', weight: 5, opacity: 0.9, dashArray: '10,6', lineCap: 'butt', lineJoin: 'bevel' };
+            },
+            onEachFeature: function(feature, layer) {
+                var p = feature.properties;
+                var name = p['Nome Strad'] || p.Toponomast || 'N/D';
+                var html = '<div class="popup-title">' + name + '</div>';
+                html += '<span class="popup-layer-badge" style="background:#e74c3c;">Proposta Eliminazione</span>';
+                html += '<table class="popup-table">';
+                html += popupRow('Flussi Giornalieri', fmtNum(p['Flussi Gio']));
+                html += popupRow('Flusso Medio', fmtNum(p['Flusso Med']));
+                html += popupRow('Municipio', fmt(p.Municipio));
+                html += '</table>';
+                layer.bindPopup(html, { maxWidth: 340 });
+            }
+        });
+
+        // Build insertion layer from high traffic features
+        var insFeatures = [];
+        layerHighTraffic.eachLayer(function(layer) {
+            if (roadNameMatchesProposte(layer.feature.properties, insNames, 'high')) {
+                insFeatures.push(layer.feature);
+            }
+        });
+        var layerProposteIns = L.geoJSON({ type: 'FeatureCollection', features: insFeatures }, {
+            style: function() {
+                return { color: '#8e44ad', weight: 5, opacity: 0.9, dashArray: '10,6', lineCap: 'butt', lineJoin: 'bevel' };
+            },
+            onEachFeature: function(feature, layer) {
+                var p = feature.properties;
+                var name = p['Nome Strada'] || p.Toponomastica || 'N/D';
+                var html = '<div class="popup-title">' + name + '</div>';
+                html += '<span class="popup-layer-badge" style="background:#8e44ad;">Proposta Inserimento</span>';
+                html += '<table class="popup-table">';
+                html += popupRow('Flussi Giornalieri', fmtNum(p['Flussi Giornalieri']));
+                html += popupRow('Flusso Medio', fmtNum(p['Flusso Medio']));
+                html += popupRow('Municipio', fmt(p.Municipio));
+                html += '</table>';
+                layer.bindPopup(html, { maxWidth: 340 });
+            }
+        });
 
         // Fit map to data bounds
         try {
@@ -698,42 +847,31 @@
         });
 
         // =====================================================
-        // ROAD SEARCH
+        // ROAD SEARCH (with OSM Nominatim - Change #5)
         // =====================================================
         var searchInput = document.getElementById('road-search');
         var searchResults = document.getElementById('search-results');
         var searchIndex = [];
 
-        // Build search index from all layers
         function buildSearchIndex() {
-            // PGTU roads
             layerPGTU.eachLayer(function(layer) {
                 var p = layer.feature.properties;
                 var name = p.Toponomast || p.Nome || '';
-                if (name) {
-                    searchIndex.push({ name: name, type: 'PGTU', layer: layer });
-                }
+                if (name) searchIndex.push({ name: name, type: 'PGTU', layer: layer });
             });
-            // Low traffic
             layerLowTraffic.eachLayer(function(layer) {
                 var p = layer.feature.properties;
                 var name = p['Nome Strad'] || p.Toponom || p.Toponomast || '';
-                if (name) {
-                    searchIndex.push({ name: name, type: 'Flussi Bassi', layer: layer });
-                }
+                if (name) searchIndex.push({ name: name, type: 'Flussi Bassi', layer: layer });
             });
-            // High traffic
             layerHighTraffic.eachLayer(function(layer) {
                 var p = layer.feature.properties;
                 var name = p['Nome Strada'] || p.Toponomastica || p.Toponom || '';
-                if (name) {
-                    searchIndex.push({ name: name, type: 'Flussi Elevati', layer: layer });
-                }
+                if (name) searchIndex.push({ name: name, type: 'Flussi Elevati', layer: layer });
             });
         }
         buildSearchIndex();
 
-        // Remove duplicate names per type
         var seen = {};
         searchIndex = searchIndex.filter(function(item) {
             var key = item.name + '||' + item.type;
@@ -742,38 +880,83 @@
             return true;
         });
 
-        var searchTimeout;
+        var searchTimeout, nominatimTimeout;
         searchInput.addEventListener('input', function() {
             clearTimeout(searchTimeout);
+            clearTimeout(nominatimTimeout);
             var query = this.value.trim().toLowerCase();
             if (query.length < 2) {
                 searchResults.style.display = 'none';
                 return;
             }
             searchTimeout = setTimeout(function() {
-                var matches = [];
-                for (var i = 0; i < searchIndex.length && matches.length < 30; i++) {
+                // Local search
+                var localMatches = [];
+                for (var i = 0; i < searchIndex.length && localMatches.length < 20; i++) {
                     if (searchIndex[i].name.toLowerCase().indexOf(query) !== -1) {
-                        matches.push(searchIndex[i]);
+                        localMatches.push(searchIndex[i]);
                     }
                 }
-                if (matches.length === 0) {
-                    searchResults.style.display = 'none';
-                    return;
-                }
+
                 var html = '';
-                matches.forEach(function(m) {
-                    html += '<div class="search-result-item" data-idx="' + searchIndex.indexOf(m) + '">';
-                    html += m.name + '<span class="result-type">' + m.type + '</span></div>';
-                });
+                if (localMatches.length > 0) {
+                    html += '<div class="search-separator">Risultati locali</div>';
+                    localMatches.forEach(function(m) {
+                        html += '<div class="search-result-item" data-idx="' + searchIndex.indexOf(m) + '">';
+                        html += m.name + '<span class="result-type">' + m.type + '</span></div>';
+                    });
+                }
                 searchResults.innerHTML = html;
-                searchResults.style.display = 'block';
+                if (html) searchResults.style.display = 'block';
+
+                // OSM Nominatim search (Change #5)
+                if (query.length >= 3) {
+                    clearTimeout(nominatimTimeout);
+                    nominatimTimeout = setTimeout(function() {
+                        var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' +
+                            encodeURIComponent(query + ', Roma') +
+                            '&viewbox=12.23,42.05,12.86,41.65&bounded=1&limit=8&addressdetails=1';
+                        fetch(url, { headers: { 'Accept-Language': 'it' } })
+                        .then(function(resp) { return resp.json(); })
+                        .then(function(results) {
+                            if (results && results.length > 0) {
+                                var osmHtml = '<div class="search-separator">Risultati OpenStreetMap</div>';
+                                results.forEach(function(r) {
+                                    osmHtml += '<div class="search-result-item" data-osm-lat="' + r.lat +
+                                        '" data-osm-lon="' + r.lon + '" data-osm-name="' +
+                                        (r.display_name || '').replace(/"/g, '&quot;') + '">';
+                                    osmHtml += '<span>' + r.display_name + '</span>';
+                                    osmHtml += '<span class="result-source">OSM</span></div>';
+                                });
+                                searchResults.innerHTML += osmHtml;
+                                searchResults.style.display = 'block';
+                            }
+                        })
+                        .catch(function() {});
+                    }, 500);
+                }
             }, 150);
         });
 
         searchResults.addEventListener('click', function(e) {
             var item = e.target.closest('.search-result-item');
             if (!item) return;
+
+            // OSM result
+            var osmLat = item.getAttribute('data-osm-lat');
+            var osmLon = item.getAttribute('data-osm-lon');
+            if (osmLat && osmLon) {
+                map.setView([parseFloat(osmLat), parseFloat(osmLon)], 16);
+                L.popup()
+                    .setLatLng([parseFloat(osmLat), parseFloat(osmLon)])
+                    .setContent('<div class="popup-title">' + (item.getAttribute('data-osm-name') || 'Posizione OSM') + '</div>')
+                    .openOn(map);
+                searchResults.style.display = 'none';
+                searchInput.value = item.getAttribute('data-osm-name') || '';
+                return;
+            }
+
+            // Local result
             var idx = parseInt(item.getAttribute('data-idx'));
             var match = searchIndex[idx];
             if (match && match.layer) {
@@ -784,8 +967,6 @@
                     map.setView(match.layer.getLatLng(), 16);
                 }
                 match.layer.openPopup();
-                // Flash highlight
-                var origStyle = match.layer.options;
                 match.layer.setStyle({ color: '#ff00ff', weight: 8, opacity: 1 });
                 setTimeout(function() {
                     if (match.type === 'PGTU') match.layer.setStyle(stylePGTU(match.layer.feature));
@@ -794,10 +975,9 @@
                 }, 2000);
             }
             searchResults.style.display = 'none';
-            searchInput.value = match.name;
+            searchInput.value = match ? match.name : '';
         });
 
-        // Close search when clicking outside
         document.addEventListener('click', function(e) {
             if (!e.target.closest('.search-container')) {
                 searchResults.style.display = 'none';
@@ -805,29 +985,84 @@
         });
 
         // =====================================================
+        // FIND AND ZOOM TO ROAD (Change #4)
+        // =====================================================
+        function findAndZoomToRoad(roadName, layerType) {
+            if (!roadName) return;
+            var searchLayer = (layerType === 'low') ? layerLowTraffic : layerHighTraffic;
+            var styleFunc = (layerType === 'low') ? styleLowTraffic : styleHighTraffic;
+            var nameLower = roadName.trim().toLowerCase();
+            var bestMatch = null;
+            var bestScore = 0;
+
+            searchLayer.eachLayer(function(layer) {
+                var p = layer.feature.properties;
+                var featureName;
+                if (layerType === 'low') {
+                    featureName = p['Nome Strad'] || p.Toponomast || '';
+                } else {
+                    featureName = p['Nome Strada'] || p.Toponomastica || '';
+                }
+                var fLower = featureName.toLowerCase();
+                var score = 0;
+                if (fLower === nameLower) score = 100;
+                else if (fLower.indexOf(nameLower) !== -1) score = 80;
+                else if (nameLower.indexOf(fLower) !== -1 && fLower.length > 3) score = 60;
+                else {
+                    var topoName = (layerType === 'low') ? (p.Toponomast || '') : (p.Toponomastica || '');
+                    var tLower = topoName.toLowerCase();
+                    if (tLower.indexOf(nameLower) !== -1) score = 50;
+                    else if (nameLower.indexOf(tLower) !== -1 && tLower.length > 3) score = 40;
+                }
+                if (score > bestScore) { bestScore = score; bestMatch = layer; }
+            });
+
+            if (bestMatch) {
+                var bounds = bestMatch.getBounds ? bestMatch.getBounds() : null;
+                if (bounds) map.fitBounds(bounds, { maxZoom: 16, padding: [40, 40] });
+                else if (bestMatch.getLatLng) map.setView(bestMatch.getLatLng(), 16);
+                bestMatch.openPopup();
+                var flashCount = 0;
+                var flashInterval = setInterval(function() {
+                    if (flashCount % 2 === 0) {
+                        bestMatch.setStyle({ color: '#ff00ff', weight: 8, opacity: 1 });
+                    } else {
+                        bestMatch.setStyle(styleFunc(bestMatch.feature));
+                    }
+                    flashCount++;
+                    if (flashCount >= 6) {
+                        clearInterval(flashInterval);
+                        bestMatch.setStyle(styleFunc(bestMatch.feature));
+                    }
+                }, 350);
+            }
+        }
+
+        // Click handler for road links in tables
+        document.getElementById('tab-content').addEventListener('click', function(e) {
+            var link = e.target.closest('.road-link');
+            if (!link) return;
+            findAndZoomToRoad(link.getAttribute('data-road'), link.getAttribute('data-layer'));
+        });
+
+        // =====================================================
         // DISTANCE MEASUREMENT TOOL
         // =====================================================
         var MeasureControl = L.Control.extend({
             options: { position: 'topleft' },
-            onAdd: function(map) {
+            onAdd: function() {
                 var container = L.DomUtil.create('div', 'leaflet-measure-control leaflet-bar');
                 container.innerHTML = '&#x1F4CF;';
                 container.title = 'Misura distanza';
                 L.DomEvent.disableClickPropagation(container);
-                container.addEventListener('click', function() {
-                    toggleMeasure();
-                });
-                this._container = container;
+                container.addEventListener('click', function() { toggleMeasure(); });
                 return container;
             }
         });
         map.addControl(new MeasureControl());
 
         var measuring = false;
-        var measurePoints = [];
-        var measureMarkers = [];
-        var measureLines = [];
-        var measureTooltips = [];
+        var measurePoints = [], measureMarkers = [], measureLines = [], measureTooltips = [];
 
         function toggleMeasure() {
             measuring = !measuring;
@@ -848,10 +1083,7 @@
             measureMarkers.forEach(function(m) { map.removeLayer(m); });
             measureLines.forEach(function(l) { map.removeLayer(l); });
             measureTooltips.forEach(function(t) { map.removeLayer(t); });
-            measurePoints = [];
-            measureMarkers = [];
-            measureLines = [];
-            measureTooltips = [];
+            measurePoints = []; measureMarkers = []; measureLines = []; measureTooltips = [];
         }
 
         function formatDist(meters) {
@@ -861,66 +1093,80 @@
 
         function onMeasureClick(e) {
             measurePoints.push(e.latlng);
-
-            // Add marker
             var marker = L.circleMarker(e.latlng, {
-                radius: 5, color: '#0079ff', fillColor: '#fff',
-                fillOpacity: 1, weight: 2
+                radius: 5, color: '#0079ff', fillColor: '#fff', fillOpacity: 1, weight: 2
             }).addTo(map);
             measureMarkers.push(marker);
 
             if (measurePoints.length > 1) {
                 var prev = measurePoints[measurePoints.length - 2];
                 var curr = measurePoints[measurePoints.length - 1];
-
-                // Draw line segment
                 var line = L.polyline([prev, curr], {
                     color: '#0079ff', weight: 3, dashArray: '8,6', opacity: 0.9
                 }).addTo(map);
                 measureLines.push(line);
 
-                // Calculate total distance
                 var totalDist = 0;
                 for (var i = 1; i < measurePoints.length; i++) {
                     totalDist += measurePoints[i - 1].distanceTo(measurePoints[i]);
                 }
 
-                // Segment distance tooltip
                 var segDist = prev.distanceTo(curr);
-                var midLat = (prev.lat + curr.lat) / 2;
-                var midLng = (prev.lng + curr.lng) / 2;
-                var tooltip = L.tooltip({
-                    permanent: true,
-                    direction: 'center',
-                    className: 'measure-tooltip'
-                }).setLatLng([midLat, midLng])
-                  .setContent(formatDist(segDist))
-                  .addTo(map);
+                var tooltip = L.tooltip({ permanent: true, direction: 'center', className: 'measure-tooltip' })
+                    .setLatLng([(prev.lat + curr.lat) / 2, (prev.lng + curr.lng) / 2])
+                    .setContent(formatDist(segDist)).addTo(map);
                 measureTooltips.push(tooltip);
 
-                // Total distance tooltip on last point
-                if (measurePoints.length > 2) {
-                    // Remove previous total tooltip if exists
-                    var last = measureTooltips[measureTooltips.length - 2];
-                }
-                var totalTooltip = L.tooltip({
-                    permanent: true,
-                    direction: 'top',
-                    className: 'measure-tooltip',
-                    offset: [0, -10]
-                }).setLatLng(curr)
-                  .setContent('Totale: ' + formatDist(totalDist))
-                  .addTo(map);
+                var totalTooltip = L.tooltip({ permanent: true, direction: 'top', className: 'measure-tooltip', offset: [0, -10] })
+                    .setLatLng(curr).setContent('Totale: ' + formatDist(totalDist)).addTo(map);
                 measureTooltips.push(totalTooltip);
             }
         }
 
-        // Double click to finish measurement
         map.on('dblclick', function(e) {
-            if (measuring) {
-                L.DomEvent.stopPropagation(e);
-                L.DomEvent.preventDefault(e);
-            }
+            if (measuring) { L.DomEvent.stopPropagation(e); L.DomEvent.preventDefault(e); }
+        });
+
+        // =====================================================
+        // RESIZABLE TABLE PANEL (Change #1)
+        // =====================================================
+        var resizeHandle = document.getElementById('resize-handle');
+        var isDragging = false;
+        var startY, startMapHeight;
+
+        resizeHandle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            isDragging = true;
+            startY = e.clientY;
+            startMapHeight = document.getElementById('map-container').offsetHeight;
+            resizeHandle.classList.add('dragging');
+            document.body.style.cursor = 'ns-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            var dy = e.clientY - startY;
+            var newHeight = startMapHeight + dy;
+            var totalHeight = window.innerHeight;
+            var handleHeight = resizeHandle.offsetHeight;
+            var minMap = 100;
+            var minTable = 80;
+            var maxMapHeight = totalHeight - handleHeight - minTable;
+            if (newHeight < minMap) newHeight = minMap;
+            if (newHeight > maxMapHeight) newHeight = maxMapHeight;
+            document.getElementById('map-container').style.height = (newHeight / totalHeight * 100) + '%';
+            map.invalidateSize();
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (!isDragging) return;
+            isDragging = false;
+            resizeHandle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            map.invalidateSize();
         });
 
         // =====================================================
@@ -931,8 +1177,6 @@
 
         select.addEventListener('change', function() {
             selectedMunicipio = this.value;
-
-            // Update municipality highlighting
             layerMunicipii.eachLayer(function(layer) {
                 var num = layer.feature.properties.Numero || layer.feature.properties.Attuale || '';
                 if (!selectedMunicipio) {
@@ -944,13 +1188,8 @@
                     layer.setStyle(dimmedMunicipiStyle);
                 }
             });
-
-            // Show/hide table panel
-            if (selectedMunicipio) {
-                showTablePanel(selectedMunicipio);
-            } else {
-                hideTablePanel();
-            }
+            if (selectedMunicipio) showTablePanel(selectedMunicipio);
+            else hideTablePanel();
         });
 
         function showTablePanel(munNum) {
@@ -958,19 +1197,14 @@
             var container = document.getElementById('map-container');
             panel.classList.add('visible');
             container.classList.add('with-table');
+            resizeHandle.classList.add('visible');
             map.invalidateSize();
 
-            // Find municipio name
             var munName = 'Municipio ' + munNum;
             for (var i = 0; i < municipi.length; i++) {
-                if (String(municipi[i].numero) === String(munNum)) {
-                    munName = municipi[i].label;
-                    break;
-                }
+                if (String(municipi[i].numero) === String(munNum)) { munName = municipi[i].label; break; }
             }
             document.getElementById('table-title').textContent = 'Dati - ' + munName;
-
-            // Show stats and the appropriate table
             updateTableContent(munNum);
         }
 
@@ -979,6 +1213,8 @@
             var container = document.getElementById('map-container');
             panel.classList.remove('visible');
             container.classList.remove('with-table');
+            resizeHandle.classList.remove('visible');
+            container.style.height = '';
             map.invalidateSize();
         }
 
@@ -986,9 +1222,7 @@
             hideTablePanel();
             select.value = '';
             selectedMunicipio = null;
-            layerMunicipii.eachLayer(function(layer) {
-                layer.setStyle(defaultMunicipiStyle);
-            });
+            layerMunicipii.eachLayer(function(layer) { layer.setStyle(defaultMunicipiStyle); });
         });
 
         // Tab switching
@@ -1005,13 +1239,11 @@
             var data1 = (typeof dataTabella1 !== 'undefined' && dataTabella1[munNum]) ? dataTabella1[munNum] : [];
             var data2 = (typeof dataTabella2 !== 'undefined' && dataTabella2[munNum]) ? dataTabella2[munNum] : [];
 
-            // Stats
             var statsHtml = '';
             statsHtml += '<div class="stat-box"><div class="stat-value">' + data1.length + '</div><div class="stat-label">Strade in Tabella 1<br>(Rete Principale)</div></div>';
             statsHtml += '<div class="stat-box"><div class="stat-value">' + data2.length + '</div><div class="stat-label">Strade in Tabella 2<br>(Fuori Rete)</div></div>';
             statsHtml += '<div class="stat-box"><div class="stat-value">' + (data1.length + data2.length) + '</div><div class="stat-label">Totale Strade<br>Analizzate</div></div>';
 
-            // Average flows
             if (data1.length > 0) {
                 var avg1 = data1.reduce(function(s, r) { return s + (parseFloat(r['Flusso medio']) || 0); }, 0) / data1.length;
                 statsHtml += '<div class="stat-box"><div class="stat-value">' + Math.round(avg1).toLocaleString('it-IT') + '</div><div class="stat-label">Flusso Medio Tab.1<br>(veicoli/giorno)</div></div>';
@@ -1021,34 +1253,34 @@
                 statsHtml += '<div class="stat-box"><div class="stat-value">' + Math.round(avg2).toLocaleString('it-IT') + '</div><div class="stat-label">Flusso Medio Tab.2<br>(veicoli/giorno)</div></div>';
             }
 
+            // Proposte stats (Change #6)
+            var elimCount = 0, insCount = 0;
+            if (typeof proposteEliminazioni !== 'undefined' && proposteEliminazioni[munNum]) elimCount = proposteEliminazioni[munNum].length;
+            if (typeof proposteInserimenti !== 'undefined' && proposteInserimenti[munNum]) insCount = proposteInserimenti[munNum].length;
+            if (elimCount > 0 || insCount > 0) {
+                statsHtml += '<div class="stat-box"><div class="stat-value" style="color:#e74c3c">' + elimCount + '</div><div class="stat-label">Proposte<br>Eliminazione</div></div>';
+                statsHtml += '<div class="stat-box"><div class="stat-value" style="color:#8e44ad">' + insCount + '</div><div class="stat-label">Proposte<br>Inserimento</div></div>';
+            }
+
             document.getElementById('table-stats').innerHTML = statsHtml;
 
-            // Render appropriate table
             var content = document.getElementById('tab-content');
-            if (activeTab === 'tab1') {
-                content.innerHTML = renderTable1(data1);
-            } else {
-                content.innerHTML = renderTable2(data2);
-            }
+            if (activeTab === 'tab1') content.innerHTML = renderTable1(data1);
+            else content.innerHTML = renderTable2(data2);
         }
 
         function renderTable1(data) {
             if (data.length === 0) return '<p style="color:#888;padding:12px;">Nessun dato disponibile per questo municipio.</p>';
             var html = '<table class="data-table"><thead><tr>';
-            html += '<th>#</th>';
-            html += '<th>Identificazione Strada</th>';
-            html += '<th>Classificazione</th>';
-            html += '<th>% PGTU</th>';
-            html += '<th>Flusso Medio</th>';
-            html += '<th>Flusso Min</th>';
-            html += '<th>Flusso Max</th>';
-            html += '<th>TPL</th>';
-            html += '<th>GV</th>';
+            html += '<th>#</th><th>Identificazione Strada</th><th>Classificazione</th><th>% PGTU</th>';
+            html += '<th>Flusso Medio</th><th>Flusso Min</th><th>Flusso Max</th><th>TPL</th><th>GV</th>';
             html += '</tr></thead><tbody>';
             data.forEach(function(row, idx) {
+                var roadName = row['Identificazione Strada'] || '';
+                var escaped = roadName.replace(/"/g, '&quot;');
                 html += '<tr>';
                 html += '<td>' + (idx + 1) + '</td>';
-                html += '<td>' + (row['Identificazione Strada'] || '') + '</td>';
+                html += '<td><span class="road-link" data-road="' + escaped + '" data-layer="low">' + roadName + '</span></td>';
                 html += '<td>' + (row['Classificazione'] || '') + '</td>';
                 html += '<td>' + (row['% PGTU'] !== undefined && row['% PGTU'] !== '' ? (parseFloat(row['% PGTU']) * 100).toFixed(0) + '%' : '') + '</td>';
                 html += '<td>' + fmtCell(row['Flusso medio']) + '</td>';
@@ -1065,18 +1297,15 @@
         function renderTable2(data) {
             if (data.length === 0) return '<p style="color:#888;padding:12px;">Nessun dato disponibile per questo municipio.</p>';
             var html = '<table class="data-table"><thead><tr>';
-            html += '<th>#</th>';
-            html += '<th>Identificazione Strada</th>';
-            html += '<th>Flusso Medio</th>';
-            html += '<th>Flusso Min</th>';
-            html += '<th>Flusso Max</th>';
-            html += '<th>TPL</th>';
-            html += '<th>GV</th>';
+            html += '<th>#</th><th>Identificazione Strada</th><th>Flusso Medio</th>';
+            html += '<th>Flusso Min</th><th>Flusso Max</th><th>TPL</th><th>GV</th>';
             html += '</tr></thead><tbody>';
             data.forEach(function(row, idx) {
+                var roadName = row['Identificazione Strada'] || '';
+                var escaped = roadName.replace(/"/g, '&quot;');
                 html += '<tr>';
                 html += '<td>' + (idx + 1) + '</td>';
-                html += '<td>' + (row['Identificazione Strada'] || '') + '</td>';
+                html += '<td><span class="road-link" data-road="' + escaped + '" data-layer="high">' + roadName + '</span></td>';
                 html += '<td>' + fmtCell(row['Flusso medio']) + '</td>';
                 html += '<td>' + fmtCell(row['Flusso Min']) + '</td>';
                 html += '<td>' + fmtCell(row['Flusso Max']) + '</td>';
@@ -1097,14 +1326,10 @@
 
         // Auto-switch tab based on traffic layer toggle
         document.getElementById('toggle-low-traffic').addEventListener('change', function() {
-            if (this.checked && !document.getElementById('toggle-high-traffic').checked) {
-                setActiveTab('tab1');
-            }
+            if (this.checked && !document.getElementById('toggle-high-traffic').checked) setActiveTab('tab1');
         });
         document.getElementById('toggle-high-traffic').addEventListener('change', function() {
-            if (this.checked && !document.getElementById('toggle-low-traffic').checked) {
-                setActiveTab('tab2');
-            }
+            if (this.checked && !document.getElementById('toggle-low-traffic').checked) setActiveTab('tab2');
         });
 
         function setActiveTab(tab) {
@@ -1118,10 +1343,16 @@
         // =====================================================
         // LAYER TOGGLE HANDLERS
         // =====================================================
+        function bringProposteFront() {
+            if (map.hasLayer(layerProposteElim)) layerProposteElim.bringToFront();
+            if (map.hasLayer(layerProposteIns)) layerProposteIns.bringToFront();
+        }
+
         document.getElementById('toggle-pgtu').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(layerPGTU);
                 document.getElementById('legend-pgtu').style.display = '';
+                bringProposteFront();
             } else {
                 map.removeLayer(layerPGTU);
                 document.getElementById('legend-pgtu').style.display = 'none';
@@ -1131,8 +1362,8 @@
         document.getElementById('toggle-low-traffic').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(layerLowTraffic);
-                // Ensure PGTU stays on top
                 if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                bringProposteFront();
                 document.getElementById('legend-low').style.display = '';
             } else {
                 map.removeLayer(layerLowTraffic);
@@ -1143,12 +1374,35 @@
         document.getElementById('toggle-high-traffic').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(layerHighTraffic);
-                // Ensure PGTU stays on top
                 if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                bringProposteFront();
                 document.getElementById('legend-high').style.display = '';
             } else {
                 map.removeLayer(layerHighTraffic);
                 document.getElementById('legend-high').style.display = 'none';
+            }
+        });
+
+        // Proposte toggle handlers (Change #6)
+        document.getElementById('toggle-proposte-elim').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(layerProposteElim);
+                layerProposteElim.bringToFront();
+                document.getElementById('legend-proposte-elim').style.display = '';
+            } else {
+                map.removeLayer(layerProposteElim);
+                document.getElementById('legend-proposte-elim').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-proposte-ins').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(layerProposteIns);
+                layerProposteIns.bringToFront();
+                document.getElementById('legend-proposte-ins').style.display = '';
+            } else {
+                map.removeLayer(layerProposteIns);
+                document.getElementById('legend-proposte-ins').style.display = 'none';
             }
         });
 
