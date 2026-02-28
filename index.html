@@ -828,9 +828,10 @@
                 </div>
                 <div class="edit-counter" id="edit-counter"></div>
                 <div class="edit-actions">
-                    <button class="edit-action-btn" id="btn-export-proposte" title="Esporta proposte come JSON">Esporta</button>
+                    <button class="edit-action-btn" id="btn-export-proposte" title="Esporta proposte come JSON">Esporta JSON</button>
+                    <button class="edit-action-btn" id="btn-report-proposte" title="Genera report HTML per municipio" style="background:#2c3e50;color:white;font-weight:600;">Report</button>
                     <button class="edit-action-btn" id="btn-import-proposte" title="Importa proposte da JSON">Importa</button>
-                    <button class="edit-action-btn" id="btn-clear-proposte" title="Cancella tutte le proposte">Cancella Tutto</button>
+                    <button class="edit-action-btn" id="btn-clear-proposte" title="Cancella tutte le proposte">Cancella</button>
                 </div>
                 <input type="file" id="import-file" accept=".json" style="display:none">
             </div>
@@ -1625,6 +1626,222 @@
                 renderProposte();
             }
         });
+
+        // =====================================================
+        // REPORT GENERATION
+        // =====================================================
+        document.getElementById('btn-report-proposte').addEventListener('click', function() {
+            var proposte = loadProposte();
+            if (proposte.length === 0) { alert('Nessuna proposta da includere nel report.'); return; }
+
+            // Try to resolve municipio for proposte that don't have one
+            // by checking if the geometry centroid falls inside a municipio polygon
+            proposte.forEach(function(p) {
+                if (p.municipio) return;
+                var lat, lng;
+                if (p.geometry && p.geometry.type === 'Point') {
+                    lng = p.geometry.coordinates[0];
+                    lat = p.geometry.coordinates[1];
+                } else if (p.geometry && p.geometry.coordinates) {
+                    // Use midpoint of line
+                    var coords = p.geometry.type === 'LineString' ? p.geometry.coordinates :
+                        (p.geometry.type === 'MultiLineString' ? p.geometry.coordinates[0] : []);
+                    if (coords.length > 0) {
+                        var mid = coords[Math.floor(coords.length / 2)];
+                        lng = mid[0]; lat = mid[1];
+                    }
+                }
+                if (lat && lng) {
+                    var pt = L.latLng(lat, lng);
+                    layerMunicipii.eachLayer(function(layer) {
+                        if (p.municipio) return;
+                        try {
+                            var bounds = layer.getBounds();
+                            if (bounds.contains(pt)) {
+                                var props = layer.feature.properties;
+                                p.municipio = String(props.Numero || props.Attuale || '');
+                            }
+                        } catch(e) {}
+                    });
+                }
+            });
+
+            // Group by municipio
+            var byMunicipio = {};
+            proposte.forEach(function(p) {
+                var mun = p.municipio || 'ND';
+                if (!byMunicipio[mun]) byMunicipio[mun] = [];
+                byMunicipio[mun].push(p);
+            });
+
+            // Sort municipio keys numerically
+            var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
+                if (a === 'ND') return 1;
+                if (b === 'ND') return -1;
+                return parseInt(a) - parseInt(b);
+            });
+
+            // Get municipio label
+            function getMunLabel(num) {
+                if (num === 'ND') return 'Non Assegnato';
+                for (var i = 0; i < municipi.length; i++) {
+                    if (String(municipi[i].numero) === String(num)) return municipi[i].label;
+                }
+                return 'Municipio ' + num;
+            }
+
+            // Date
+            var now = new Date();
+            var dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
+
+            // Count totals
+            var totElim = proposte.filter(function(p) { return p.type === 'eliminazione'; }).length;
+            var totIns = proposte.filter(function(p) { return p.type === 'inserimento'; }).length;
+            var totLines = proposte.filter(function(p) { return p.geometry && p.geometry.type !== 'Point'; }).length;
+            var totPoints = proposte.filter(function(p) { return p.geometry && p.geometry.type === 'Point'; }).length;
+
+            // Build HTML report
+            var h = '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">';
+            h += '<title>Report Proposte PGTU - ' + dateStr + '</title>';
+            h += '<style>';
+            h += '*, *::before, *::after { box-sizing: border-box; }';
+            h += 'body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f5f6fa; color: #333; }';
+            h += '.report-container { max-width: 900px; margin: 0 auto; padding: 30px 24px; }';
+            h += '.report-header { text-align: center; padding: 30px 0 20px; border-bottom: 3px solid #2c3e50; margin-bottom: 30px; }';
+            h += '.report-header h1 { font-size: 24px; color: #2c3e50; margin: 0 0 6px; }';
+            h += '.report-header .subtitle { font-size: 14px; color: #666; }';
+            h += '.report-header .date { font-size: 13px; color: #888; margin-top: 4px; }';
+            h += '.summary-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 30px; justify-content: center; }';
+            h += '.summary-card { background: white; border-radius: 8px; padding: 16px 24px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); text-align: center; min-width: 140px; }';
+            h += '.summary-card .val { font-size: 28px; font-weight: 700; }';
+            h += '.summary-card .lbl { font-size: 11px; color: #888; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }';
+            h += '.mun-section { background: white; border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); margin-bottom: 24px; overflow: hidden; page-break-inside: avoid; }';
+            h += '.mun-header { background: #2c3e50; color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }';
+            h += '.mun-header h2 { margin: 0; font-size: 17px; font-weight: 600; }';
+            h += '.mun-header .mun-counts { display: flex; gap: 12px; font-size: 12px; }';
+            h += '.mun-header .mun-counts span { padding: 2px 8px; border-radius: 3px; }';
+            h += '.count-elim { background: rgba(231,76,60,0.9); }';
+            h += '.count-ins { background: rgba(0,100,0,0.9); }';
+            h += '.sub-section { padding: 16px 20px; }';
+            h += '.sub-section h3 { font-size: 14px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 2px solid; }';
+            h += '.sub-elim { color: #c0392b; border-color: #e74c3c; }';
+            h += '.sub-ins { color: #006400; border-color: #006400; }';
+            h += '.prop-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }';
+            h += '.prop-table th { text-align: left; padding: 6px 10px; background: #f8f9fa; color: #555; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 1px solid #ddd; }';
+            h += '.prop-table td { padding: 8px 10px; border-bottom: 1px solid #eee; vertical-align: top; }';
+            h += '.prop-table tr:last-child td { border-bottom: none; }';
+            h += '.prop-type-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 3px; color: white; }';
+            h += '.badge-line { background: #34495e; }';
+            h += '.badge-point { background: #7f8c8d; }';
+            h += '.badge-drawn { background: #2980b9; }';
+            h += '.notes-box { background: #fffde7; border-left: 3px solid #ffc107; padding: 4px 8px; margin-top: 4px; font-size: 12px; white-space: pre-wrap; border-radius: 2px; }';
+            h += '.no-notes { color: #bbb; font-style: italic; }';
+            h += '.footer { text-align: center; padding: 20px 0; color: #aaa; font-size: 11px; border-top: 1px solid #ddd; margin-top: 20px; }';
+            h += '@media print { body { background: white; } .report-container { padding: 10px; } .mun-section { box-shadow: none; border: 1px solid #ddd; } .summary-card { box-shadow: none; border: 1px solid #ddd; } }';
+            h += '</style></head><body>';
+            h += '<div class="report-container">';
+
+            // Header
+            h += '<div class="report-header">';
+            h += '<h1>Report Proposte di Modifica</h1>';
+            h += '<div class="subtitle">Piano Generale del Traffico Urbano - Roma Capitale</div>';
+            h += '<div class="date">Generato il ' + dateStr + '</div>';
+            h += '</div>';
+
+            // Summary
+            h += '<div class="summary-grid">';
+            h += '<div class="summary-card"><div class="val">' + proposte.length + '</div><div class="lbl">Proposte Totali</div></div>';
+            h += '<div class="summary-card"><div class="val" style="color:#e74c3c">' + totElim + '</div><div class="lbl">Eliminazioni</div></div>';
+            h += '<div class="summary-card"><div class="val" style="color:#006400">' + totIns + '</div><div class="lbl">Inserimenti</div></div>';
+            h += '<div class="summary-card"><div class="val" style="color:#34495e">' + totLines + '</div><div class="lbl">Archi Stradali</div></div>';
+            h += '<div class="summary-card"><div class="val" style="color:#7f8c8d">' + totPoints + '</div><div class="lbl">Punti</div></div>';
+            h += '<div class="summary-card"><div class="val" style="color:#2c3e50">' + munKeys.length + '</div><div class="lbl">Municipi Coinvolti</div></div>';
+            h += '</div>';
+
+            // Per-municipio sections
+            munKeys.forEach(function(munNum) {
+                var items = byMunicipio[munNum];
+                var munLabel = getMunLabel(munNum);
+                var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
+                var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
+
+                h += '<div class="mun-section">';
+                h += '<div class="mun-header"><h2>' + munLabel + '</h2>';
+                h += '<div class="mun-counts">';
+                if (munElim.length > 0) h += '<span class="count-elim">' + munElim.length + ' Eliminaz.</span>';
+                if (munIns.length > 0) h += '<span class="count-ins">' + munIns.length + ' Inserim.</span>';
+                h += '</div></div>';
+
+                // Eliminazioni sub-section
+                if (munElim.length > 0) {
+                    h += '<div class="sub-section">';
+                    h += '<h3 class="sub-elim">Proposte di Eliminazione (' + munElim.length + ')</h3>';
+                    h += buildProposteTable(munElim);
+                    h += '</div>';
+                }
+
+                // Inserimenti sub-section
+                if (munIns.length > 0) {
+                    h += '<div class="sub-section">';
+                    h += '<h3 class="sub-ins">Proposte di Inserimento (' + munIns.length + ')</h3>';
+                    h += buildProposteTable(munIns);
+                    h += '</div>';
+                }
+
+                h += '</div>';
+            });
+
+            // Footer
+            h += '<div class="footer">Report generato automaticamente da PGTU Roma - Mappa Interattiva</div>';
+            h += '</div></body></html>';
+
+            // Download as HTML
+            var blob = new Blob([h], { type: 'text/html;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'report_proposte_pgtu_' + now.toISOString().slice(0, 10) + '.html';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        function buildProposteTable(items) {
+            var h = '<table class="prop-table">';
+            h += '<tr><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
+            items.forEach(function(p, idx) {
+                var isPoint = p.geometry && p.geometry.type === 'Point';
+                var isDrawn = p.source === 'Disegno manuale';
+                var typeBadge;
+                if (isPoint) typeBadge = '<span class="prop-type-badge badge-point">Punto</span>';
+                else if (isDrawn) typeBadge = '<span class="prop-type-badge badge-drawn">Disegnato</span>';
+                else typeBadge = '<span class="prop-type-badge badge-line">Arco Stradale</span>';
+
+                var coords = '';
+                if (isPoint) {
+                    coords = ' <span style="font-size:10px;color:#999;">[' +
+                        p.geometry.coordinates[1].toFixed(5) + ', ' +
+                        p.geometry.coordinates[0].toFixed(5) + ']</span>';
+                }
+
+                var notesHtml;
+                if (p.notes && p.notes.trim()) {
+                    notesHtml = '<div class="notes-box">' + p.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+                } else {
+                    notesHtml = '<span class="no-notes">Nessuna nota</span>';
+                }
+
+                h += '<tr>';
+                h += '<td>' + (idx + 1) + '</td>';
+                h += '<td><strong>' + (p.name || 'N/D') + '</strong>' + coords + '</td>';
+                h += '<td>' + typeBadge + '</td>';
+                h += '<td>' + (p.source || '&mdash;') + '</td>';
+                h += '<td>' + (p.flussi || '&mdash;') + '</td>';
+                h += '<td>' + notesHtml + '</td>';
+                h += '</tr>';
+            });
+            h += '</table>';
+            return h;
+        }
 
         // =====================================================
         // INITIAL RENDER OF SAVED PROPOSTE
