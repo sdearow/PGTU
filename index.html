@@ -515,8 +515,12 @@
         .edit-btn-point {
             border-color: #888;
             color: #555;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-width: 1px;
+        }
+        .edit-btn-point .edit-btn-icon {
             font-size: 11px;
-            padding: 4px 10px;
         }
         .edit-btn-point.active-elim {
             border-color: #e74c3c;
@@ -580,6 +584,27 @@
         }
         .edit-mode-banner.mode-ins {
             background: rgba(0,100,0,0.9);
+        }
+        .edit-mode-banner.mode-draw {
+            background: rgba(0,80,170,0.9);
+        }
+        .edit-btn-draw {
+            border-color: #0050aa;
+            color: #0050aa;
+        }
+        .edit-btn-draw.active {
+            background: #0050aa;
+            color: white;
+        }
+        .draw-instructions {
+            font-size: 10px;
+            color: #888;
+            margin-top: 2px;
+            line-height: 1.4;
+            display: none;
+        }
+        .draw-instructions.visible {
+            display: block;
         }
 
         /* Notes modal */
@@ -751,6 +776,18 @@
                 </div>
             </div>
 
+            <!-- Linee ATAC -->
+            <div class="control-section">
+                <h3>Trasporto Pubblico</h3>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-atac">
+                    <label for="toggle-atac">Linee ATAC</label>
+                </div>
+                <div class="legend-block" id="legend-atac" style="display:none">
+                    <div class="legend-item"><span class="legend-line" style="background:#8b1a1a"></span> Linee bus/tram ATAC</div>
+                </div>
+            </div>
+
             <!-- Proposte di Modifica -->
             <div class="control-section">
                 <h3>Proposte di Modifica</h3>
@@ -780,8 +817,14 @@
                         <span class="edit-btn-icon">&#10004;</span> Aggiungi Inserimento
                     </button>
                     <button class="edit-btn edit-btn-point" id="btn-edit-point">
-                        <span class="edit-btn-icon">&#128205;</span> Aggiungi Punto
+                        <span class="edit-btn-icon">&#128205;</span> Punto
                     </button>
+                    <button class="edit-btn edit-btn-draw" id="btn-edit-draw">
+                        <span class="edit-btn-icon">&#9998;</span> Disegna Linea
+                    </button>
+                    <div class="draw-instructions" id="draw-instructions">
+                        Clicca sulla mappa per aggiungere vertici. Doppio-clic per terminare la linea.
+                    </div>
                 </div>
                 <div class="edit-counter" id="edit-counter"></div>
                 <div class="edit-actions">
@@ -834,6 +877,9 @@
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/PGTUAnnessoD_5.js"></script>
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/FlussiTomTomflussi_tomtom_3.js"></script>
     <script src="Mappe Proposte_130224/Tabella 2/Mappa/layers/FlussiTomTomflussi_tomtom_2.js"></script>
+
+    <!-- ATAC lines -->
+    <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/LineeATAC_4.js"></script>
 
     <!-- Excel data converted to JSON -->
     <script src="data_tabella1.js"></script>
@@ -1016,6 +1062,42 @@
             style: stylePGTU,
             onEachFeature: popupPGTU
         }).addTo(map);
+
+        // ATAC bus/tram lines layer (off by default, loaded on demand)
+        var layerATAC = null;
+        var atacLoaded = false;
+        function ensureATACLayer() {
+            if (atacLoaded) return;
+            atacLoaded = true;
+            if (typeof json_LineeATAC_4 !== 'undefined') {
+                layerATAC = L.geoJSON(json_LineeATAC_4, {
+                    style: function() {
+                        return {
+                            color: '#8b1a1a',
+                            weight: 1.5,
+                            opacity: 0.7,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        var p = feature.properties;
+                        var sigla = p.SiglaL_Ute || p.SiglaUtent || '';
+                        var nome = p.NomeEsteso || '';
+                        var html = '<div class="popup-title">Linea ' + sigla + '</div>';
+                        html += '<span class="popup-layer-badge" style="background:#8b1a1a;">ATAC</span>';
+                        html += '<table class="popup-table">';
+                        if (nome) html += popupRow('Nome', nome);
+                        if (p.Lunghezza) html += popupRow('Lunghezza', Math.round(p.Lunghezza) + ' m');
+                        if (p.NodiSupp) html += popupRow('Nodi', p.NodiSupp);
+                        if (p.Az_Linea) html += popupRow('Azienda', p.Az_Linea);
+                        html += popupRow('Attivo', p.Attivo === 'TRUE' ? 'S&igrave;' : 'No');
+                        html += '</table>';
+                        layer.bindPopup(html, { maxWidth: 340 });
+                    }
+                });
+            }
+        }
 
         // Fit map to data bounds
         try {
@@ -1200,30 +1282,59 @@
         // =====================================================
         // editMode: null | 'eliminazione' | 'inserimento'
         // pointMode: true/false (when true, clicks add point markers instead of selecting roads)
+        // drawMode: true/false (when true, clicks add vertices to build a polyline)
         var editMode = null;
         var pointMode = false;
+        var drawMode = false;
+
+        // Draw state
+        var drawPoints = [];
+        var drawMarkers = [];
+        var drawLines = [];
+        var drawPreviewLine = null;
 
         var btnEditElim = document.getElementById('btn-edit-elim');
         var btnEditIns = document.getElementById('btn-edit-ins');
         var btnEditPoint = document.getElementById('btn-edit-point');
+        var btnEditDraw = document.getElementById('btn-edit-draw');
+        var drawInstructions = document.getElementById('draw-instructions');
         var banner = document.getElementById('edit-mode-banner');
 
         function setEditMode(mode) {
-            // If same mode, toggle off
-            if (editMode === mode) {
+            if (editMode === mode && !drawMode && !pointMode) {
                 editMode = null;
-                pointMode = false;
             } else {
                 editMode = mode;
-                pointMode = false;
             }
+            pointMode = false;
+            drawMode = false;
+            cancelDraw();
             updateEditUI();
         }
 
         function togglePointMode() {
             if (!editMode) return;
             pointMode = !pointMode;
+            drawMode = false;
+            cancelDraw();
             updateEditUI();
+        }
+
+        function toggleDrawMode() {
+            if (!editMode) return;
+            drawMode = !drawMode;
+            pointMode = false;
+            if (!drawMode) cancelDraw();
+            updateEditUI();
+        }
+
+        function cancelDraw() {
+            drawPoints = [];
+            drawMarkers.forEach(function(m) { map.removeLayer(m); });
+            drawMarkers = [];
+            drawLines.forEach(function(l) { map.removeLayer(l); });
+            drawLines = [];
+            if (drawPreviewLine) { map.removeLayer(drawPreviewLine); drawPreviewLine = null; }
         }
 
         function updateEditUI() {
@@ -1237,19 +1348,27 @@
                 btnEditPoint.classList.add(editMode === 'eliminazione' ? 'active-elim' : 'active-ins');
             }
 
+            // Draw button
+            btnEditDraw.classList.toggle('active', !!drawMode);
+            drawInstructions.classList.toggle('visible', !!drawMode);
+
             // Banner
-            banner.classList.remove('visible', 'mode-elim', 'mode-ins');
+            banner.classList.remove('visible', 'mode-elim', 'mode-ins', 'mode-draw');
             if (editMode) {
                 banner.classList.add('visible');
-                if (editMode === 'eliminazione') {
-                    banner.classList.add('mode-elim');
-                    banner.textContent = pointMode
+                if (drawMode) {
+                    banner.classList.add('mode-draw');
+                    var drawLabel = editMode === 'eliminazione' ? 'ELIMINAZIONE' : 'INSERIMENTO';
+                    banner.textContent = 'DISEGNA LINEA ' + drawLabel + ' - Clicca per aggiungere vertici, doppio-clic per terminare';
+                } else if (pointMode) {
+                    banner.classList.add(editMode === 'eliminazione' ? 'mode-elim' : 'mode-ins');
+                    banner.textContent = editMode === 'eliminazione'
                         ? 'MODO PUNTO ELIMINAZIONE - Clicca sulla mappa per aggiungere un punto'
-                        : 'MODO ELIMINAZIONE - Clicca su una strada per aggiungerla come proposta di eliminazione';
+                        : 'MODO PUNTO INSERIMENTO - Clicca sulla mappa per aggiungere un punto';
                 } else {
-                    banner.classList.add('mode-ins');
-                    banner.textContent = pointMode
-                        ? 'MODO PUNTO INSERIMENTO - Clicca sulla mappa per aggiungere un punto'
+                    banner.classList.add(editMode === 'eliminazione' ? 'mode-elim' : 'mode-ins');
+                    banner.textContent = editMode === 'eliminazione'
+                        ? 'MODO ELIMINAZIONE - Clicca su una strada per aggiungerla come proposta di eliminazione'
                         : 'MODO INSERIMENTO - Clicca su una strada per aggiungerla come proposta di inserimento';
                 }
             }
@@ -1261,21 +1380,33 @@
             } else {
                 mapEl.classList.remove('map-edit-cursor');
             }
+
+            // Disable doubleClickZoom when drawing
+            if (drawMode) {
+                map.doubleClickZoom.disable();
+            } else {
+                map.doubleClickZoom.enable();
+            }
         }
 
         btnEditElim.addEventListener('click', function() { setEditMode('eliminazione'); });
         btnEditIns.addEventListener('click', function() { setEditMode('inserimento'); });
         btnEditPoint.addEventListener('click', function() { togglePointMode(); });
+        btnEditDraw.addEventListener('click', function() { toggleDrawMode(); });
 
-        // Escape key exits edit mode
+        // Escape key exits edit mode or cancels draw
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 if (modalOverlay.classList.contains('visible')) {
                     modalOverlay.classList.remove('visible');
                     modalCallback = null;
+                } else if (drawMode && drawPoints.length > 0) {
+                    cancelDraw();
                 } else if (editMode) {
                     editMode = null;
                     pointMode = false;
+                    drawMode = false;
+                    cancelDraw();
                     updateEditUI();
                 }
             }
@@ -1292,7 +1423,7 @@
         }
 
         function handleEditClick(e, feature, layerType) {
-            if (!editMode || pointMode) return;
+            if (!editMode || pointMode || drawMode) return;
 
             L.DomEvent.stopPropagation(e);
 
@@ -1329,7 +1460,7 @@
         function attachEditClickHandlers(geoLayer, layerType) {
             geoLayer.eachLayer(function(layer) {
                 layer.on('click', function(e) {
-                    if (editMode && !pointMode) {
+                    if (editMode && !pointMode && !drawMode) {
                         handleEditClick(e, layer.feature, layerType);
                     }
                     // If not in edit mode, normal popup behavior works via bindPopup
@@ -1342,10 +1473,37 @@
         attachEditClickHandlers(layerHighTraffic, 'high');
 
         // =====================================================
-        // EDIT MODE: POINT MARKERS (click on map)
+        // EDIT MODE: POINT MARKERS & DRAW LINE (click on map)
         // =====================================================
         map.on('click', function(e) {
-            if (!editMode || !pointMode) return;
+            if (!editMode) return;
+
+            // DRAW MODE: add vertex
+            if (drawMode) {
+                var latlng = e.latlng;
+                drawPoints.push(latlng);
+
+                // Draw vertex marker
+                var color = editMode === 'eliminazione' ? COLOR_ELIM : COLOR_INS;
+                var marker = L.circleMarker(latlng, {
+                    radius: 5, color: color, fillColor: '#fff', fillOpacity: 1, weight: 2
+                }).addTo(map);
+                drawMarkers.push(marker);
+
+                // Draw line segment
+                if (drawPoints.length > 1) {
+                    var prev = drawPoints[drawPoints.length - 2];
+                    var curr = drawPoints[drawPoints.length - 1];
+                    var line = L.polyline([prev, curr], {
+                        color: color, weight: 4, dashArray: '6,4', opacity: 0.8
+                    }).addTo(map);
+                    drawLines.push(line);
+                }
+                return;
+            }
+
+            // POINT MODE: add point marker
+            if (!pointMode) return;
 
             var latlng = e.latlng;
             var currentEditMode = editMode;
@@ -1363,6 +1521,49 @@
                         type: 'Point',
                         coordinates: [latlng.lng, latlng.lat]
                     },
+                    created: new Date().toISOString()
+                };
+                var proposte = loadProposte();
+                proposte.push(proposta);
+                saveProposte(proposte);
+                renderProposte();
+            });
+        });
+
+        // DRAW MODE: preview line following mouse
+        map.on('mousemove', function(e) {
+            if (!drawMode || drawPoints.length === 0) return;
+            var color = editMode === 'eliminazione' ? COLOR_ELIM : COLOR_INS;
+            if (drawPreviewLine) map.removeLayer(drawPreviewLine);
+            drawPreviewLine = L.polyline([drawPoints[drawPoints.length - 1], e.latlng], {
+                color: color, weight: 3, dashArray: '4,4', opacity: 0.5
+            }).addTo(map);
+        });
+
+        // DRAW MODE: double-click finishes the line
+        map.on('dblclick', function(e) {
+            if (!drawMode || drawPoints.length < 2) return;
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+
+            var coords = drawPoints.map(function(ll) { return [ll.lng, ll.lat]; });
+            var geometry = { type: 'LineString', coordinates: coords };
+            var currentEditMode = editMode;
+            var typeLabel = currentEditMode === 'eliminazione' ? 'Eliminazione' : 'Inserimento';
+
+            // Clean up draw visuals
+            cancelDraw();
+
+            showNotesModal(currentEditMode, 'Linea disegnata (' + coords.length + ' vertici)', function(notes) {
+                var proposta = {
+                    id: generateId(),
+                    type: currentEditMode,
+                    name: 'Linea ' + typeLabel + ' (disegnata)',
+                    source: 'Disegno manuale',
+                    flussi: '',
+                    municipio: '',
+                    notes: notes,
+                    geometry: geometry,
                     created: new Date().toISOString()
                 };
                 var proposte = loadProposte();
@@ -1978,6 +2179,22 @@
             } else {
                 map.removeLayer(layerHighTraffic);
                 document.getElementById('legend-high').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-atac').addEventListener('change', function() {
+            if (this.checked) {
+                ensureATACLayer();
+                if (layerATAC) {
+                    map.addLayer(layerATAC);
+                    // ATAC goes below PGTU and proposte
+                    if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                    bringProposteFront();
+                }
+                document.getElementById('legend-atac').style.display = '';
+            } else {
+                if (layerATAC) map.removeLayer(layerATAC);
+                document.getElementById('legend-atac').style.display = 'none';
             }
         });
 
