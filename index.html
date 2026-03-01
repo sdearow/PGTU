@@ -829,6 +829,8 @@
                 <div class="edit-counter" id="edit-counter"></div>
                 <div class="edit-actions">
                     <button class="edit-action-btn" id="btn-export-proposte" title="Esporta proposte come JSON">Esporta JSON</button>
+                    <button class="edit-action-btn" id="btn-export-geojson" title="Esporta come GeoJSON per QGIS" style="background:#27ae60;color:white;">Esporta GeoJSON</button>
+                    <button class="edit-action-btn" id="btn-export-shp" title="Esporta come Shapefile (ZIP) per QGIS" style="background:#2980b9;color:white;">Esporta SHP</button>
                     <button class="edit-action-btn" id="btn-report-proposte" title="Genera report HTML per municipio" style="background:#2c3e50;color:white;font-weight:600;">Report</button>
                     <button class="edit-action-btn" id="btn-import-proposte" title="Importa proposte da JSON">Importa</button>
                     <button class="edit-action-btn" id="btn-clear-proposte" title="Cancella tutte le proposte">Cancella</button>
@@ -1135,6 +1137,36 @@
             return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
         }
 
+        // Haversine distance between two [lng, lat] points in km
+        function haversineDist(c1, c2) {
+            var R = 6371;
+            var dLat = (c2[1] - c1[1]) * Math.PI / 180;
+            var dLng = (c2[0] - c1[0]) * Math.PI / 180;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(c1[1] * Math.PI / 180) * Math.cos(c2[1] * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        // Calculate total length (km) of a GeoJSON geometry
+        function calcGeoLength(geometry) {
+            if (!geometry) return 0;
+            function lineLen(coords) {
+                var len = 0;
+                for (var i = 1; i < coords.length; i++) {
+                    len += haversineDist(coords[i - 1], coords[i]);
+                }
+                return len;
+            }
+            if (geometry.type === 'LineString') return lineLen(geometry.coordinates);
+            if (geometry.type === 'MultiLineString') {
+                var total = 0;
+                geometry.coordinates.forEach(function(line) { total += lineLen(line); });
+                return total;
+            }
+            return 0;
+        }
+
         // Build popup HTML for a manual proposta
         function buildPropostaPopup(proposta) {
             var isElim = proposta.type === 'eliminazione';
@@ -1145,6 +1177,11 @@
             if (proposta.source) {
                 html += '<table class="popup-table">';
                 html += popupRow('Fonte', proposta.source);
+                if (proposta.classificazione) {
+                    var cfName = classificaNames[proposta.classificazione] || proposta.classificazione;
+                    html += popupRow('Classificazione', cfName + ' (' + proposta.classificazione + ')');
+                }
+                if (proposta.lunghezza) html += popupRow('Lunghezza', proposta.lunghezza.toFixed(2) + ' km');
                 if (proposta.flussi) html += popupRow('Flussi Giornalieri', proposta.flussi);
                 if (proposta.municipio) html += popupRow('Municipio', proposta.municipio);
                 html += '</table>';
@@ -1456,7 +1493,12 @@
             if (layerType === 'low') flussi = fmtNum(props['Flussi Gio']) || '';
             else if (layerType === 'high') flussi = fmtNum(props['Flussi Giornalieri']) || '';
 
+            var classificazione = '';
+            if (layerType === 'pgtu') classificazione = props.Classifica || '';
+            else classificazione = props.CF || '';
+
             var geometry = feature.geometry;
+            var lunghezza = calcGeoLength(geometry);
             var currentEditMode = editMode;
 
             showNotesModal(currentEditMode, roadName, function(notes) {
@@ -1466,6 +1508,8 @@
                     name: roadName,
                     source: layerType === 'pgtu' ? 'PGTU Annesso D' : layerType === 'low' ? 'Flussi Bassi (Tab. 1)' : 'Flussi Elevati (Tab. 2)',
                     flussi: flussi,
+                    classificazione: classificazione,
+                    lunghezza: lunghezza,
                     municipio: municipio,
                     notes: notes,
                     geometry: geometry,
@@ -1538,6 +1582,8 @@
                     name: streetName || defaultName,
                     source: 'Punto manuale',
                     flussi: '',
+                    classificazione: '',
+                    lunghezza: 0,
                     municipio: '',
                     notes: notes,
                     geometry: {
@@ -1577,13 +1623,16 @@
             // Clean up draw visuals
             cancelDraw();
 
-            showNotesModal(currentEditMode, 'Linea disegnata (' + coords.length + ' vertici)', function(notes) {
+            var drawnLength = calcGeoLength(geometry);
+            showNotesModal(currentEditMode, 'Linea disegnata (' + coords.length + ' vertici, ' + drawnLength.toFixed(2) + ' km)', function(notes) {
                 var proposta = {
                     id: generateId(),
                     type: currentEditMode,
                     name: 'Linea ' + typeLabel + ' (disegnata)',
                     source: 'Disegno manuale',
                     flussi: '',
+                    classificazione: '',
+                    lunghezza: drawnLength,
                     municipio: '',
                     notes: notes,
                     geometry: geometry,
@@ -1610,6 +1659,102 @@
             a.click();
             URL.revokeObjectURL(url);
         });
+
+        // GeoJSON export for QGIS
+        document.getElementById('btn-export-geojson').addEventListener('click', function() {
+            var proposte = loadProposte();
+            if (proposte.length === 0) { alert('Nessuna proposta da esportare.'); return; }
+            var features = proposte.map(function(p) {
+                return {
+                    type: 'Feature',
+                    properties: {
+                        id: p.id,
+                        tipo: p.type,
+                        nome: p.name || '',
+                        fonte: p.source || '',
+                        classificazione: p.classificazione || '',
+                        lunghezza_km: p.lunghezza || calcGeoLength(p.geometry),
+                        flussi: p.flussi || '',
+                        municipio: p.municipio || '',
+                        note: p.notes || '',
+                        data_creazione: p.created || ''
+                    },
+                    geometry: p.geometry
+                };
+            });
+            var geojson = {
+                type: 'FeatureCollection',
+                name: 'PGTU_Proposte',
+                crs: { type: 'name', properties: { name: 'urn:ogc:def:crs:OGC:1.3:CRS84' } },
+                features: features
+            };
+            var blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'pgtu_proposte_' + new Date().toISOString().slice(0,10) + '.geojson';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Shapefile export (two separate layers: lines + points, packaged with shp-write)
+        document.getElementById('btn-export-shp').addEventListener('click', function() {
+            var proposte = loadProposte();
+            if (proposte.length === 0) { alert('Nessuna proposta da esportare.'); return; }
+
+            // shp-write is loaded lazily from CDN
+            if (!window._shpWriteLoaded) {
+                var script = document.createElement('script');
+                script.src = 'https://unpkg.com/shp-write@0.3.2/shpwrite.js';
+                script.onload = function() {
+                    window._shpWriteLoaded = true;
+                    doShpExport(proposte);
+                };
+                script.onerror = function() {
+                    alert('Errore nel caricamento della libreria shp-write. Verifica la connessione internet.\nIn alternativa usa "Esporta GeoJSON" che funziona offline.');
+                };
+                document.head.appendChild(script);
+            } else {
+                doShpExport(proposte);
+            }
+        });
+
+        function doShpExport(proposte) {
+            var features = proposte.map(function(p) {
+                return {
+                    type: 'Feature',
+                    properties: {
+                        id: p.id,
+                        tipo: p.type,
+                        nome: p.name || '',
+                        fonte: p.source || '',
+                        classif: p.classificazione || '',
+                        km: +(p.lunghezza || calcGeoLength(p.geometry)).toFixed(3),
+                        flussi: p.flussi || '',
+                        municipio: p.municipio || '',
+                        note: (p.notes || '').substring(0, 254),
+                        data: (p.created || '').substring(0, 10)
+                    },
+                    geometry: p.geometry
+                };
+            });
+
+            var geojson = { type: 'FeatureCollection', features: features };
+
+            try {
+                var options = {
+                    folder: 'pgtu_proposte',
+                    types: {
+                        point: 'punti_proposte',
+                        polyline: 'archi_proposte',
+                        polygon: 'poligoni_proposte'
+                    }
+                };
+                shpwrite.download(geojson, options);
+            } catch(err) {
+                alert('Errore generazione Shapefile: ' + err.message + '\nUsa "Esporta GeoJSON" come alternativa.');
+            }
+        }
 
         var importFileInput = document.getElementById('import-file');
         document.getElementById('btn-import-proposte').addEventListener('click', function() {
@@ -1883,21 +2028,23 @@
                         name: p.name,
                         source: p.source || '',
                         flussi: p.flussi || '',
+                        classificazione: p.classificazione || '',
+                        lunghezza: 0,
                         notes: [],
                         count: 0,
                         type: p.type
                     };
                 }
                 roadMap[key].count++;
+                roadMap[key].lunghezza += (p.lunghezza || calcGeoLength(p.geometry));
                 if (p.notes && p.notes.trim()) {
                     var noteText = p.notes.trim();
-                    // Only add if not duplicate
                     if (roadMap[key].notes.indexOf(noteText) === -1) {
                         roadMap[key].notes.push(noteText);
                     }
                 }
-                // Keep best flussi value (non-empty)
                 if (p.flussi && !roadMap[key].flussi) roadMap[key].flussi = p.flussi;
+                if (p.classificazione && !roadMap[key].classificazione) roadMap[key].classificazione = p.classificazione;
             });
 
             // Build merged list: roads first, then points/drawn
@@ -2069,6 +2216,92 @@
             h += '<div class="summary-card"><div class="val" style="color:#2c3e50">' + munKeys.length + '</div><div class="lbl">Municipi Coinvolti</div></div>';
             h += '</div>';
 
+            // Compute advanced statistics: total km, km by type, distribution by classification
+            var totalKmElim = 0, totalKmIns = 0;
+            var classDistElim = {}, classDistIns = {};
+            // Use unique roads (merge same-name fragments)
+            var allMergedElim = mergeProposte(proposte.filter(function(p) { return p.type === 'eliminazione'; }));
+            var allMergedIns = mergeProposte(proposte.filter(function(p) { return p.type === 'inserimento'; }));
+            function accumulateStats(mergedList, kmAccum, classDist) {
+                var km = 0;
+                mergedList.forEach(function(item) {
+                    var len = 0, cf = '';
+                    if (item.kind === 'road') {
+                        len = item.data.lunghezza || 0;
+                        cf = item.data.classificazione || '';
+                    } else {
+                        len = item.data.lunghezza || calcGeoLength(item.data.geometry);
+                        cf = item.data.classificazione || '';
+                    }
+                    km += len;
+                    if (cf) {
+                        if (!classDist[cf]) classDist[cf] = { count: 0, km: 0 };
+                        classDist[cf].count++;
+                        classDist[cf].km += len;
+                    }
+                });
+                return km;
+            }
+            totalKmElim = accumulateStats(allMergedElim, totalKmElim, classDistElim);
+            totalKmIns = accumulateStats(allMergedIns, totalKmIns, classDistIns);
+            var totalKm = totalKmElim + totalKmIns;
+
+            // Merge classification distributions
+            var allClassDist = {};
+            [classDistElim, classDistIns].forEach(function(dist) {
+                Object.keys(dist).forEach(function(cf) {
+                    if (!allClassDist[cf]) allClassDist[cf] = { count: 0, km: 0, elimKm: 0, insKm: 0 };
+                    allClassDist[cf].count += dist[cf].count;
+                    allClassDist[cf].km += dist[cf].km;
+                });
+            });
+            Object.keys(classDistElim).forEach(function(cf) {
+                if (!allClassDist[cf]) allClassDist[cf] = { count: 0, km: 0, elimKm: 0, insKm: 0 };
+                allClassDist[cf].elimKm = classDistElim[cf].km;
+            });
+            Object.keys(classDistIns).forEach(function(cf) {
+                if (!allClassDist[cf]) allClassDist[cf] = { count: 0, km: 0, elimKm: 0, insKm: 0 };
+                allClassDist[cf].insKm = classDistIns[cf].km;
+            });
+
+            // Advanced stats section
+            h += '<div class="mun-section">';
+            h += '<div class="mun-header" style="background:#1a252f;"><h2>Statistiche Avanzate</h2></div>';
+            h += '<div class="sub-section">';
+
+            // Total km cards
+            h += '<div class="summary-grid" style="margin-bottom:16px;">';
+            h += '<div class="summary-card"><div class="val" style="font-size:22px;">' + totalKm.toFixed(2) + '</div><div class="lbl">Km Totali Modificati</div></div>';
+            h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#e74c3c;">' + totalKmElim.toFixed(2) + '</div><div class="lbl">Km Eliminazioni</div></div>';
+            h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#006400;">' + totalKmIns.toFixed(2) + '</div><div class="lbl">Km Inserimenti</div></div>';
+            h += '</div>';
+
+            // Classification distribution table
+            var classKeys = Object.keys(allClassDist).sort();
+            if (classKeys.length > 0) {
+                h += '<h3 style="font-size:14px;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid #2c3e50;color:#2c3e50;">Distribuzione per Classificazione Stradale</h3>';
+                h += '<table class="prop-table">';
+                h += '<tr><th>Classificazione</th><th>Codice</th><th>Proposte</th><th>Km Totali</th><th>Km Elim.</th><th>Km Inserim.</th><th>% sul Totale</th></tr>';
+                classKeys.forEach(function(cf) {
+                    var d = allClassDist[cf];
+                    var cfName = classificaNames[cf] || cf;
+                    var pct = totalKm > 0 ? (d.km / totalKm * 100).toFixed(1) : '0.0';
+                    var barWidth = totalKm > 0 ? Math.round(d.km / totalKm * 100) : 0;
+                    h += '<tr>';
+                    h += '<td><strong>' + cfName + '</strong></td>';
+                    h += '<td>' + cf + '</td>';
+                    h += '<td>' + d.count + '</td>';
+                    h += '<td>' + d.km.toFixed(2) + '</td>';
+                    h += '<td style="color:#e74c3c;">' + (d.elimKm || 0).toFixed(2) + '</td>';
+                    h += '<td style="color:#006400;">' + (d.insKm || 0).toFixed(2) + '</td>';
+                    h += '<td><div style="display:flex;align-items:center;gap:6px;"><div style="background:#3498db;height:10px;width:' + barWidth + 'px;border-radius:2px;min-width:2px;"></div> ' + pct + '%</div></td>';
+                    h += '</tr>';
+                });
+                h += '</table>';
+            }
+
+            h += '</div></div>';
+
             // Per-municipio sections
             munKeys.forEach(function(munNum) {
                 var items = byMunicipio[munNum];
@@ -2122,12 +2355,14 @@
 
         function buildMergedTable(mergedItems) {
             var h = '<table class="prop-table">';
-            h += '<tr><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
+            h += '<tr><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Class.</th><th>Km</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
             mergedItems.forEach(function(item, idx) {
                 if (item.kind === 'road') {
                     var d = item.data;
                     var typeBadge = '<span class="prop-type-badge badge-line">Arco Stradale</span>';
                     if (d.count > 1) typeBadge += '<span class="prop-type-badge badge-merged">&times;' + d.count + ' segmenti</span>';
+                    var cfLabel = d.classificazione ? (classificaNames[d.classificazione] || d.classificazione) : '&mdash;';
+                    var kmLabel = d.lunghezza > 0 ? d.lunghezza.toFixed(2) : '&mdash;';
                     var notesHtml;
                     if (d.notes.length > 0) {
                         notesHtml = d.notes.map(function(n) {
@@ -2140,6 +2375,8 @@
                     h += '<td>' + (idx + 1) + '</td>';
                     h += '<td><strong>' + (d.name || 'N/D') + '</strong></td>';
                     h += '<td>' + typeBadge + '</td>';
+                    h += '<td>' + cfLabel + '</td>';
+                    h += '<td>' + kmLabel + '</td>';
                     h += '<td>' + (d.source || '&mdash;') + '</td>';
                     h += '<td>' + (d.flussi || '&mdash;') + '</td>';
                     h += '<td>' + notesHtml + '</td>';
@@ -2158,6 +2395,8 @@
                             p.geometry.coordinates[1].toFixed(5) + ', ' +
                             p.geometry.coordinates[0].toFixed(5) + ']</span>';
                     }
+                    var pCf = p.classificazione ? (classificaNames[p.classificazione] || p.classificazione) : '&mdash;';
+                    var pKm = (p.lunghezza && p.lunghezza > 0) ? p.lunghezza.toFixed(2) : (isPoint ? '&mdash;' : calcGeoLength(p.geometry).toFixed(2));
                     var notesHtml;
                     if (p.notes && p.notes.trim()) {
                         notesHtml = '<div class="notes-box">' + p.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
@@ -2168,6 +2407,8 @@
                     h += '<td>' + (idx + 1) + '</td>';
                     h += '<td><strong>' + (p.name || 'N/D') + '</strong>' + coords + '</td>';
                     h += '<td>' + typeBadge + '</td>';
+                    h += '<td>' + pCf + '</td>';
+                    h += '<td>' + pKm + '</td>';
                     h += '<td>' + (p.source || '&mdash;') + '</td>';
                     h += '<td>' + (p.flussi || '&mdash;') + '</td>';
                     h += '<td>' + notesHtml + '</td>';
