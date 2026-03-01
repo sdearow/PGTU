@@ -1970,9 +1970,29 @@
             var now = new Date();
             var dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
 
-            var totElim = proposte.filter(function(p) { return p.type === 'eliminazione'; }).length;
-            var totIns = proposte.filter(function(p) { return p.type === 'inserimento'; }).length;
-            var totLines = proposte.filter(function(p) { return p.geometry && p.geometry.type !== 'Point'; }).length;
+            // Count totals - merge same-name road arcs as one unique entry
+            function countUnique(items) {
+                var roadNames = {};
+                var count = 0;
+                items.forEach(function(p) {
+                    var isPoint = p.geometry && p.geometry.type === 'Point';
+                    var isDrawn = p.source === 'Disegno manuale';
+                    if (isPoint || isDrawn) {
+                        count++;
+                        return;
+                    }
+                    var key = (p.name || '').trim().toLowerCase();
+                    if (!key || roadNames[key]) return;
+                    roadNames[key] = true;
+                    count++;
+                });
+                return count;
+            }
+            var totElim = countUnique(proposte.filter(function(p) { return p.type === 'eliminazione'; }));
+            var totIns = countUnique(proposte.filter(function(p) { return p.type === 'inserimento'; }));
+            // Lines: count unique road names (fragments = 1) + drawn lines
+            var lineItems = proposte.filter(function(p) { return p.geometry && p.geometry.type !== 'Point'; });
+            var totLines = countUnique(lineItems);
             var totPoints = proposte.filter(function(p) { return p.geometry && p.geometry.type === 'Point'; }).length;
 
             // Pre-render map images for each municipio (async - loads OSM tiles)
@@ -2040,7 +2060,8 @@
             h += '</div>';
 
             h += '<div class="summary-grid">';
-            h += '<div class="summary-card"><div class="val">' + proposte.length + '</div><div class="lbl">Proposte Totali</div></div>';
+            var totProposte = totElim + totIns;
+            h += '<div class="summary-card"><div class="val">' + totProposte + '</div><div class="lbl">Proposte Totali</div></div>';
             h += '<div class="summary-card"><div class="val" style="color:#e74c3c">' + totElim + '</div><div class="lbl">Eliminazioni</div></div>';
             h += '<div class="summary-card"><div class="val" style="color:#006400">' + totIns + '</div><div class="lbl">Inserimenti</div></div>';
             h += '<div class="summary-card"><div class="val" style="color:#34495e">' + totLines + '</div><div class="lbl">Archi Stradali</div></div>';
