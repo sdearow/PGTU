@@ -1630,12 +1630,196 @@
         // =====================================================
         // REPORT GENERATION
         // =====================================================
+
+        // --- Canvas map renderer for report images ---
+        function renderMunMapImage(munNum, munProposte, width, height) {
+            var canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            var ctx = canvas.getContext('2d');
+            var pad = 20;
+
+            // Find municipio boundary geometry
+            var munGeom = null;
+            layerMunicipii.eachLayer(function(layer) {
+                var props = layer.feature.properties;
+                if (String(props.Numero || props.Attuale || '') === String(munNum)) {
+                    munGeom = layer.feature.geometry;
+                }
+            });
+
+            // Collect all coordinates for bounding box
+            var allLngs = [], allLats = [];
+            function collectCoords(coords) {
+                coords.forEach(function(c) {
+                    if (Array.isArray(c[0])) collectCoords(c);
+                    else { allLngs.push(c[0]); allLats.push(c[1]); }
+                });
+            }
+            if (munGeom) collectCoords(munGeom.coordinates);
+            munProposte.forEach(function(p) {
+                if (p.geometry) collectCoords(p.geometry.coordinates ? [p.geometry.coordinates] : []);
+                if (p.geometry && p.geometry.type !== 'Point') collectCoords(p.geometry.coordinates);
+            });
+
+            if (allLngs.length === 0) return '';
+
+            var minLng = Math.min.apply(null, allLngs), maxLng = Math.max.apply(null, allLngs);
+            var minLat = Math.min.apply(null, allLats), maxLat = Math.max.apply(null, allLats);
+            // Add 5% padding to bounds
+            var dLng = (maxLng - minLng) * 0.05 || 0.005;
+            var dLat = (maxLat - minLat) * 0.05 || 0.005;
+            minLng -= dLng; maxLng += dLng; minLat -= dLat; maxLat += dLat;
+
+            var drawW = width - 2 * pad, drawH = height - 2 * pad;
+            // Mercator-like scaling: adjust for latitude
+            var midLat = (minLat + maxLat) / 2;
+            var cosLat = Math.cos(midLat * Math.PI / 180);
+            var lngSpan = (maxLng - minLng) * cosLat;
+            var latSpan = maxLat - minLat;
+            var scale = Math.min(drawW / lngSpan, drawH / latSpan);
+            var offX = pad + (drawW - lngSpan * scale) / 2;
+            var offY = pad + (drawH - latSpan * scale) / 2;
+
+            function projX(lng) { return offX + (lng - minLng) * cosLat * scale; }
+            function projY(lat) { return offY + (maxLat - lat) * scale; }
+
+            // Background
+            ctx.fillStyle = '#f0f2f5';
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw municipio boundary
+            if (munGeom) {
+                ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+                ctx.fillStyle = 'rgba(0,121,255,0.08)';
+                ctx.lineWidth = 2;
+                function drawPolygonRings(rings) {
+                    rings.forEach(function(ring) {
+                        ctx.beginPath();
+                        ring.forEach(function(c, i) {
+                            if (i === 0) ctx.moveTo(projX(c[0]), projY(c[1]));
+                            else ctx.lineTo(projX(c[0]), projY(c[1]));
+                        });
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                    });
+                }
+                if (munGeom.type === 'MultiPolygon') {
+                    munGeom.coordinates.forEach(function(poly) { drawPolygonRings(poly); });
+                } else if (munGeom.type === 'Polygon') {
+                    drawPolygonRings(munGeom.coordinates);
+                }
+            }
+
+            // Draw proposte
+            munProposte.forEach(function(p) {
+                var isElim = p.type === 'eliminazione';
+                var color = isElim ? '#e74c3c' : '#006400';
+                if (p.geometry && p.geometry.type === 'Point') {
+                    var cx = projX(p.geometry.coordinates[0]);
+                    var cy = projY(p.geometry.coordinates[1]);
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.globalAlpha = 0.85;
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                } else if (p.geometry) {
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 4;
+                    ctx.globalAlpha = 0.9;
+                    ctx.setLineDash([8, 5]);
+                    function drawLineCoords(coords) {
+                        ctx.beginPath();
+                        coords.forEach(function(c, i) {
+                            if (i === 0) ctx.moveTo(projX(c[0]), projY(c[1]));
+                            else ctx.lineTo(projX(c[0]), projY(c[1]));
+                        });
+                        ctx.stroke();
+                    }
+                    if (p.geometry.type === 'LineString') {
+                        drawLineCoords(p.geometry.coordinates);
+                    } else if (p.geometry.type === 'MultiLineString') {
+                        p.geometry.coordinates.forEach(drawLineCoords);
+                    }
+                    ctx.setLineDash([]);
+                    ctx.globalAlpha = 1;
+                }
+            });
+
+            // Legend
+            var legendY = height - 14;
+            ctx.font = '10px sans-serif';
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(pad, legendY - 6, 16, 3);
+            ctx.fillStyle = '#555';
+            ctx.fillText('Eliminazione', pad + 20, legendY);
+            ctx.fillStyle = '#006400';
+            ctx.fillRect(pad + 100, legendY - 6, 16, 3);
+            ctx.fillStyle = '#555';
+            ctx.fillText('Inserimento', pad + 120, legendY);
+
+            return canvas.toDataURL('image/png');
+        }
+
+        // --- Merge same-road proposals ---
+        function mergeProposte(items) {
+            // Separate points/drawn from road arcs
+            var points = [];
+            var roadMap = {}; // keyed by normalised road name
+
+            items.forEach(function(p) {
+                var isPoint = p.geometry && p.geometry.type === 'Point';
+                var isDrawn = p.source === 'Disegno manuale';
+                if (isPoint || isDrawn) {
+                    points.push(p);
+                    return;
+                }
+                // Road arc: group by name
+                var key = (p.name || '').trim().toLowerCase();
+                if (!key) { points.push(p); return; }
+                if (!roadMap[key]) {
+                    roadMap[key] = {
+                        name: p.name,
+                        source: p.source || '',
+                        flussi: p.flussi || '',
+                        notes: [],
+                        count: 0,
+                        type: p.type
+                    };
+                }
+                roadMap[key].count++;
+                if (p.notes && p.notes.trim()) {
+                    var noteText = p.notes.trim();
+                    // Only add if not duplicate
+                    if (roadMap[key].notes.indexOf(noteText) === -1) {
+                        roadMap[key].notes.push(noteText);
+                    }
+                }
+                // Keep best flussi value (non-empty)
+                if (p.flussi && !roadMap[key].flussi) roadMap[key].flussi = p.flussi;
+            });
+
+            // Build merged list: roads first, then points/drawn
+            var merged = [];
+            Object.keys(roadMap).sort().forEach(function(key) {
+                merged.push({ kind: 'road', data: roadMap[key] });
+            });
+            points.forEach(function(p) {
+                merged.push({ kind: 'single', data: p });
+            });
+            return merged;
+        }
+
         document.getElementById('btn-report-proposte').addEventListener('click', function() {
             var proposte = loadProposte();
             if (proposte.length === 0) { alert('Nessuna proposta da includere nel report.'); return; }
 
-            // Try to resolve municipio for proposte that don't have one
-            // by checking if the geometry centroid falls inside a municipio polygon
+            // Resolve municipio for proposte that don't have one
             proposte.forEach(function(p) {
                 if (p.municipio) return;
                 var lat, lng;
@@ -1643,7 +1827,6 @@
                     lng = p.geometry.coordinates[0];
                     lat = p.geometry.coordinates[1];
                 } else if (p.geometry && p.geometry.coordinates) {
-                    // Use midpoint of line
                     var coords = p.geometry.type === 'LineString' ? p.geometry.coordinates :
                         (p.geometry.type === 'MultiLineString' ? p.geometry.coordinates[0] : []);
                     if (coords.length > 0) {
@@ -1674,14 +1857,12 @@
                 byMunicipio[mun].push(p);
             });
 
-            // Sort municipio keys numerically
             var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
                 if (a === 'ND') return 1;
                 if (b === 'ND') return -1;
                 return parseInt(a) - parseInt(b);
             });
 
-            // Get municipio label
             function getMunLabel(num) {
                 if (num === 'ND') return 'Non Assegnato';
                 for (var i = 0; i < municipi.length; i++) {
@@ -1690,15 +1871,20 @@
                 return 'Municipio ' + num;
             }
 
-            // Date
             var now = new Date();
             var dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
 
-            // Count totals
             var totElim = proposte.filter(function(p) { return p.type === 'eliminazione'; }).length;
             var totIns = proposte.filter(function(p) { return p.type === 'inserimento'; }).length;
             var totLines = proposte.filter(function(p) { return p.geometry && p.geometry.type !== 'Point'; }).length;
             var totPoints = proposte.filter(function(p) { return p.geometry && p.geometry.type === 'Point'; }).length;
+
+            // Pre-render map images for each municipio
+            var munImages = {};
+            munKeys.forEach(function(munNum) {
+                if (munNum === 'ND') return;
+                munImages[munNum] = renderMunMapImage(munNum, byMunicipio[munNum], 860, 400);
+            });
 
             // Build HTML report
             var h = '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">';
@@ -1722,6 +1908,8 @@
             h += '.mun-header .mun-counts span { padding: 2px 8px; border-radius: 3px; }';
             h += '.count-elim { background: rgba(231,76,60,0.9); }';
             h += '.count-ins { background: rgba(0,100,0,0.9); }';
+            h += '.mun-map { text-align: center; padding: 12px 20px; background: #f0f2f5; }';
+            h += '.mun-map img { max-width: 100%; border-radius: 4px; border: 1px solid #ddd; }';
             h += '.sub-section { padding: 16px 20px; }';
             h += '.sub-section h3 { font-size: 14px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 2px solid; }';
             h += '.sub-elim { color: #c0392b; border-color: #e74c3c; }';
@@ -1734,21 +1922,21 @@
             h += '.badge-line { background: #34495e; }';
             h += '.badge-point { background: #7f8c8d; }';
             h += '.badge-drawn { background: #2980b9; }';
+            h += '.badge-merged { background: #8e44ad; font-size: 9px; margin-left: 4px; }';
             h += '.notes-box { background: #fffde7; border-left: 3px solid #ffc107; padding: 4px 8px; margin-top: 4px; font-size: 12px; white-space: pre-wrap; border-radius: 2px; }';
+            h += '.notes-separator { border: none; border-top: 1px dashed #e0d6a0; margin: 6px 0; }';
             h += '.no-notes { color: #bbb; font-style: italic; }';
             h += '.footer { text-align: center; padding: 20px 0; color: #aaa; font-size: 11px; border-top: 1px solid #ddd; margin-top: 20px; }';
             h += '@media print { body { background: white; } .report-container { padding: 10px; } .mun-section { box-shadow: none; border: 1px solid #ddd; } .summary-card { box-shadow: none; border: 1px solid #ddd; } }';
             h += '</style></head><body>';
             h += '<div class="report-container">';
 
-            // Header
             h += '<div class="report-header">';
             h += '<h1>Report Proposte di Modifica</h1>';
             h += '<div class="subtitle">Piano Generale del Traffico Urbano - Roma Capitale</div>';
             h += '<div class="date">Generato il ' + dateStr + '</div>';
             h += '</div>';
 
-            // Summary
             h += '<div class="summary-grid">';
             h += '<div class="summary-card"><div class="val">' + proposte.length + '</div><div class="lbl">Proposte Totali</div></div>';
             h += '<div class="summary-card"><div class="val" style="color:#e74c3c">' + totElim + '</div><div class="lbl">Eliminazioni</div></div>';
@@ -1764,38 +1952,41 @@
                 var munLabel = getMunLabel(munNum);
                 var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
                 var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
+                var mergedElim = mergeProposte(munElim);
+                var mergedIns = mergeProposte(munIns);
 
                 h += '<div class="mun-section">';
                 h += '<div class="mun-header"><h2>' + munLabel + '</h2>';
                 h += '<div class="mun-counts">';
-                if (munElim.length > 0) h += '<span class="count-elim">' + munElim.length + ' Eliminaz.</span>';
-                if (munIns.length > 0) h += '<span class="count-ins">' + munIns.length + ' Inserim.</span>';
+                if (munElim.length > 0) h += '<span class="count-elim">' + mergedElim.length + ' Eliminaz.</span>';
+                if (munIns.length > 0) h += '<span class="count-ins">' + mergedIns.length + ' Inserim.</span>';
                 h += '</div></div>';
 
-                // Eliminazioni sub-section
-                if (munElim.length > 0) {
+                // Map image
+                if (munImages[munNum]) {
+                    h += '<div class="mun-map"><img src="' + munImages[munNum] + '" alt="Mappa ' + munLabel + '"></div>';
+                }
+
+                if (mergedElim.length > 0) {
                     h += '<div class="sub-section">';
-                    h += '<h3 class="sub-elim">Proposte di Eliminazione (' + munElim.length + ')</h3>';
-                    h += buildProposteTable(munElim);
+                    h += '<h3 class="sub-elim">Proposte di Eliminazione (' + mergedElim.length + ')</h3>';
+                    h += buildMergedTable(mergedElim);
                     h += '</div>';
                 }
 
-                // Inserimenti sub-section
-                if (munIns.length > 0) {
+                if (mergedIns.length > 0) {
                     h += '<div class="sub-section">';
-                    h += '<h3 class="sub-ins">Proposte di Inserimento (' + munIns.length + ')</h3>';
-                    h += buildProposteTable(munIns);
+                    h += '<h3 class="sub-ins">Proposte di Inserimento (' + mergedIns.length + ')</h3>';
+                    h += buildMergedTable(mergedIns);
                     h += '</div>';
                 }
 
                 h += '</div>';
             });
 
-            // Footer
             h += '<div class="footer">Report generato automaticamente da PGTU Roma - Mappa Interattiva</div>';
             h += '</div></body></html>';
 
-            // Download as HTML
             var blob = new Blob([h], { type: 'text/html;charset=utf-8' });
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
@@ -1805,39 +1996,59 @@
             URL.revokeObjectURL(url);
         });
 
-        function buildProposteTable(items) {
+        function buildMergedTable(mergedItems) {
             var h = '<table class="prop-table">';
             h += '<tr><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
-            items.forEach(function(p, idx) {
-                var isPoint = p.geometry && p.geometry.type === 'Point';
-                var isDrawn = p.source === 'Disegno manuale';
-                var typeBadge;
-                if (isPoint) typeBadge = '<span class="prop-type-badge badge-point">Punto</span>';
-                else if (isDrawn) typeBadge = '<span class="prop-type-badge badge-drawn">Disegnato</span>';
-                else typeBadge = '<span class="prop-type-badge badge-line">Arco Stradale</span>';
-
-                var coords = '';
-                if (isPoint) {
-                    coords = ' <span style="font-size:10px;color:#999;">[' +
-                        p.geometry.coordinates[1].toFixed(5) + ', ' +
-                        p.geometry.coordinates[0].toFixed(5) + ']</span>';
-                }
-
-                var notesHtml;
-                if (p.notes && p.notes.trim()) {
-                    notesHtml = '<div class="notes-box">' + p.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+            mergedItems.forEach(function(item, idx) {
+                if (item.kind === 'road') {
+                    var d = item.data;
+                    var typeBadge = '<span class="prop-type-badge badge-line">Arco Stradale</span>';
+                    if (d.count > 1) typeBadge += '<span class="prop-type-badge badge-merged">&times;' + d.count + ' segmenti</span>';
+                    var notesHtml;
+                    if (d.notes.length > 0) {
+                        notesHtml = d.notes.map(function(n) {
+                            return '<div class="notes-box">' + n.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+                        }).join('<hr class="notes-separator">');
+                    } else {
+                        notesHtml = '<span class="no-notes">Nessuna nota</span>';
+                    }
+                    h += '<tr>';
+                    h += '<td>' + (idx + 1) + '</td>';
+                    h += '<td><strong>' + (d.name || 'N/D') + '</strong></td>';
+                    h += '<td>' + typeBadge + '</td>';
+                    h += '<td>' + (d.source || '&mdash;') + '</td>';
+                    h += '<td>' + (d.flussi || '&mdash;') + '</td>';
+                    h += '<td>' + notesHtml + '</td>';
+                    h += '</tr>';
                 } else {
-                    notesHtml = '<span class="no-notes">Nessuna nota</span>';
+                    var p = item.data;
+                    var isPoint = p.geometry && p.geometry.type === 'Point';
+                    var isDrawn = p.source === 'Disegno manuale';
+                    var typeBadge;
+                    if (isPoint) typeBadge = '<span class="prop-type-badge badge-point">Punto</span>';
+                    else if (isDrawn) typeBadge = '<span class="prop-type-badge badge-drawn">Disegnato</span>';
+                    else typeBadge = '<span class="prop-type-badge badge-line">Arco Stradale</span>';
+                    var coords = '';
+                    if (isPoint) {
+                        coords = ' <span style="font-size:10px;color:#999;">[' +
+                            p.geometry.coordinates[1].toFixed(5) + ', ' +
+                            p.geometry.coordinates[0].toFixed(5) + ']</span>';
+                    }
+                    var notesHtml;
+                    if (p.notes && p.notes.trim()) {
+                        notesHtml = '<div class="notes-box">' + p.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
+                    } else {
+                        notesHtml = '<span class="no-notes">Nessuna nota</span>';
+                    }
+                    h += '<tr>';
+                    h += '<td>' + (idx + 1) + '</td>';
+                    h += '<td><strong>' + (p.name || 'N/D') + '</strong>' + coords + '</td>';
+                    h += '<td>' + typeBadge + '</td>';
+                    h += '<td>' + (p.source || '&mdash;') + '</td>';
+                    h += '<td>' + (p.flussi || '&mdash;') + '</td>';
+                    h += '<td>' + notesHtml + '</td>';
+                    h += '</tr>';
                 }
-
-                h += '<tr>';
-                h += '<td>' + (idx + 1) + '</td>';
-                h += '<td><strong>' + (p.name || 'N/D') + '</strong>' + coords + '</td>';
-                h += '<td>' + typeBadge + '</td>';
-                h += '<td>' + (p.source || '&mdash;') + '</td>';
-                h += '<td>' + (p.flussi || '&mdash;') + '</td>';
-                h += '<td>' + notesHtml + '</td>';
-                h += '</tr>';
             });
             h += '</table>';
             return h;
