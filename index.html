@@ -865,6 +865,17 @@
                 <label style="font-size:12px;color:#666;font-weight:600;">Nome strada:</label>
                 <input type="text" id="modal-street-name" placeholder="Inserisci il nome della strada..." style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;margin-top:3px;">
             </div>
+            <div id="modal-class-field" style="margin-top:8px;display:none;">
+                <label style="font-size:12px;color:#666;font-weight:600;">Classificazione:</label>
+                <select id="modal-classificazione" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;margin-top:3px;cursor:pointer;">
+                    <option value="">— Nessuna —</option>
+                    <option value="A">&#9632; Autostrade (A)</option>
+                    <option value="S">&#9632; Scorrimento (S)</option>
+                    <option value="IQ">&#9632; Interquartiere (IQ)</option>
+                    <option value="Q">&#9632; Quartiere (Q)</option>
+                    <option value="IZ">&#9632; Interzonali (IZ)</option>
+                </select>
+            </div>
             <div style="margin-top:8px">
                 <label style="font-size:12px;color:#666;font-weight:600;">Note:</label>
                 <textarea id="modal-notes" placeholder="Inserisci le note per questa proposta..."></textarea>
@@ -1190,7 +1201,7 @@
                 html += '<div class="popup-notes">' + proposta.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
             }
             html += '<div style="margin-top:8px">';
-            html += '<button class="popup-btn popup-btn-edit" onclick="window._pgtuEditNote(\'' + proposta.id + '\')">Modifica Note</button>';
+            html += '<button class="popup-btn popup-btn-edit" onclick="window._pgtuEditNote(\'' + proposta.id + '\')">Modifica</button>';
             html += '<button class="popup-btn popup-btn-delete" onclick="window._pgtuDeleteProposta(\'' + proposta.id + '\')">Elimina</button>';
             html += '</div>';
             return html;
@@ -1204,17 +1215,20 @@
 
             proposte.forEach(function(p) {
                 var isElim = p.type === 'eliminazione';
-                var color = isElim ? COLOR_ELIM : COLOR_INS;
+                var typeColor = isElim ? COLOR_ELIM : COLOR_INS;
                 var group = isElim ? manualElimGroup : manualInsGroup;
                 var popupHtml = buildPropostaPopup(p);
 
+                // Use classification color if available, otherwise fall back to type color
+                var lineColor = (p.classificazione && classificaColors[p.classificazione])
+                    ? classificaColors[p.classificazione] : typeColor;
+
                 if (p.geometry && p.geometry.type === 'Point') {
-                    // Point marker
                     var latlng = [p.geometry.coordinates[1], p.geometry.coordinates[0]];
                     var marker = L.circleMarker(latlng, {
                         radius: 9,
-                        color: color,
-                        fillColor: color,
+                        color: typeColor,
+                        fillColor: typeColor,
                         fillOpacity: 0.7,
                         weight: 3,
                         opacity: 1
@@ -1222,11 +1236,10 @@
                     marker.bindPopup(popupHtml, { maxWidth: 340 });
                     group.addLayer(marker);
                 } else if (p.geometry) {
-                    // Line geometry (copied from existing road)
                     var geoLayer = L.geoJSON(p.geometry, {
                         style: function() {
                             return {
-                                color: color,
+                                color: lineColor,
                                 weight: 8,
                                 opacity: 0.9,
                                 dashArray: '12,8',
@@ -1274,11 +1287,13 @@
             }
             if (!proposta) return;
             map.closePopup();
-            showNotesModal(proposta.type, proposta.name || 'Punto', function(notes) {
-                proposta.notes = notes;
+            var isLine = proposta.geometry && proposta.geometry.type !== 'Point';
+            showNotesModal(proposta.type, proposta.name || 'Punto', function(result) {
+                proposta.notes = result.notes;
+                if (result.classificazione !== undefined) proposta.classificazione = result.classificazione;
                 saveProposte(proposte);
                 renderProposte();
-            }, proposta.notes || '');
+            }, proposta.notes || '', false, isLine, proposta.classificazione || '');
         };
 
         // =====================================================
@@ -1290,11 +1305,22 @@
 
         var modalStreetName = document.getElementById('modal-street-name');
         var modalNameField = document.getElementById('modal-name-field');
+        var modalClassField = document.getElementById('modal-class-field');
+        var modalClassSelect = document.getElementById('modal-classificazione');
         var modalShowNameField = false;
+        var modalShowClassField = false;
 
-        function showNotesModal(type, roadName, callback, existingNotes, showNameInput) {
+        // Color the select options
+        var classOptColors = { 'A': '#000000', 'S': '#007bff', 'IQ': '#27f1ff', 'Q': '#ff9400', 'IZ': '#e4ff00' };
+        modalClassSelect.addEventListener('change', function() {
+            var c = classOptColors[this.value];
+            this.style.borderLeft = c ? '4px solid ' + c : '1px solid #ddd';
+        });
+
+        // opts: { notes, showName, showClass, existingClass }
+        function showNotesModal(type, roadName, callback, existingNotes, showNameInput, showClassInput, existingClass) {
             var isElim = type === 'eliminazione';
-            document.getElementById('modal-title').textContent = existingNotes !== undefined && existingNotes !== '' ? 'Modifica Note' : 'Aggiungi Proposta';
+            document.getElementById('modal-title').textContent = existingNotes !== undefined && existingNotes !== '' ? 'Modifica Proposta' : 'Aggiungi Proposta';
             document.getElementById('modal-road-name').textContent = roadName;
             var badge = document.getElementById('modal-type-badge');
             badge.textContent = isElim ? 'Eliminazione' : 'Inserimento';
@@ -1303,6 +1329,11 @@
             modalShowNameField = !!showNameInput;
             modalNameField.style.display = modalShowNameField ? 'block' : 'none';
             modalStreetName.value = '';
+            modalShowClassField = !!showClassInput;
+            modalClassField.style.display = modalShowClassField ? 'block' : 'none';
+            modalClassSelect.value = existingClass || '';
+            var c = classOptColors[existingClass];
+            modalClassSelect.style.borderLeft = c ? '4px solid ' + c : '1px solid #ddd';
             modalCallback = callback;
             modalOverlay.classList.add('visible');
             if (modalShowNameField) {
@@ -1314,11 +1345,12 @@
 
         document.getElementById('modal-save').addEventListener('click', function() {
             if (modalCallback) {
-                if (modalShowNameField) {
-                    modalCallback(modalNotes.value, modalStreetName.value.trim());
-                } else {
-                    modalCallback(modalNotes.value);
-                }
+                var result = {
+                    notes: modalNotes.value,
+                    streetName: modalShowNameField ? modalStreetName.value.trim() : undefined,
+                    classificazione: modalShowClassField ? modalClassSelect.value : undefined
+                };
+                modalCallback(result);
             }
             modalOverlay.classList.remove('visible');
             modalCallback = null;
@@ -1501,17 +1533,17 @@
             var lunghezza = calcGeoLength(geometry);
             var currentEditMode = editMode;
 
-            showNotesModal(currentEditMode, roadName, function(notes) {
+            showNotesModal(currentEditMode, roadName, function(result) {
                 var proposta = {
                     id: generateId(),
                     type: currentEditMode,
                     name: roadName,
                     source: layerType === 'pgtu' ? 'PGTU Annesso D' : layerType === 'low' ? 'Flussi Bassi (Tab. 1)' : 'Flussi Elevati (Tab. 2)',
                     flussi: flussi,
-                    classificazione: classificazione,
+                    classificazione: result.classificazione || classificazione,
                     lunghezza: lunghezza,
                     municipio: municipio,
-                    notes: notes,
+                    notes: result.notes,
                     geometry: geometry,
                     created: new Date().toISOString()
                 };
@@ -1519,7 +1551,7 @@
                 proposte.push(proposta);
                 saveProposte(proposte);
                 renderProposte();
-            });
+            }, '', false, true, classificazione);
         }
 
         // Attach edit-mode-aware click handlers to all road layers
@@ -1574,18 +1606,18 @@
             var latlng = e.latlng;
             var currentEditMode = editMode;
 
-            showNotesModal(currentEditMode, 'Lat: ' + latlng.lat.toFixed(5) + ', Lon: ' + latlng.lng.toFixed(5), function(notes, streetName) {
+            showNotesModal(currentEditMode, 'Lat: ' + latlng.lat.toFixed(5) + ', Lon: ' + latlng.lng.toFixed(5), function(result) {
                 var defaultName = 'Punto ' + (currentEditMode === 'eliminazione' ? 'Eliminazione' : 'Inserimento');
                 var proposta = {
                     id: generateId(),
                     type: currentEditMode,
-                    name: streetName || defaultName,
+                    name: result.streetName || defaultName,
                     source: 'Punto manuale',
                     flussi: '',
                     classificazione: '',
                     lunghezza: 0,
                     municipio: '',
-                    notes: notes,
+                    notes: result.notes,
                     geometry: {
                         type: 'Point',
                         coordinates: [latlng.lng, latlng.lat]
@@ -1596,7 +1628,7 @@
                 proposte.push(proposta);
                 saveProposte(proposte);
                 renderProposte();
-            }, '', true);
+            }, '', true, false, '');
         });
 
         // DRAW MODE: preview line following mouse
@@ -1624,17 +1656,17 @@
             cancelDraw();
 
             var drawnLength = calcGeoLength(geometry);
-            showNotesModal(currentEditMode, 'Linea disegnata (' + coords.length + ' vertici, ' + drawnLength.toFixed(2) + ' km)', function(notes) {
+            showNotesModal(currentEditMode, 'Linea disegnata (' + coords.length + ' vertici, ' + drawnLength.toFixed(2) + ' km)', function(result) {
                 var proposta = {
                     id: generateId(),
                     type: currentEditMode,
                     name: 'Linea ' + typeLabel + ' (disegnata)',
                     source: 'Disegno manuale',
                     flussi: '',
-                    classificazione: '',
+                    classificazione: result.classificazione || '',
                     lunghezza: drawnLength,
                     municipio: '',
-                    notes: notes,
+                    notes: result.notes,
                     geometry: geometry,
                     created: new Date().toISOString()
                 };
@@ -1642,7 +1674,7 @@
                 proposte.push(proposta);
                 saveProposte(proposte);
                 renderProposte();
-            });
+            }, '', false, true, '');
         });
 
         // =====================================================
@@ -1945,13 +1977,15 @@
                     // Draw proposte
                     munProposte.forEach(function(p) {
                         var isElim = p.type === 'eliminazione';
-                        var color = isElim ? '#e74c3c' : '#006400';
+                        var typeColor = isElim ? '#e74c3c' : '#006400';
+                        var lineColor = (p.classificazione && classificaColors[p.classificazione])
+                            ? classificaColors[p.classificazione] : typeColor;
                         if (p.geometry && p.geometry.type === 'Point') {
                             var cx = projX(p.geometry.coordinates[0]);
                             var cy = projY(p.geometry.coordinates[1]);
                             ctx.beginPath();
                             ctx.arc(cx, cy, 7, 0, Math.PI * 2);
-                            ctx.fillStyle = color;
+                            ctx.fillStyle = typeColor;
                             ctx.globalAlpha = 0.9;
                             ctx.fill();
                             ctx.globalAlpha = 1;
@@ -1959,7 +1993,7 @@
                             ctx.lineWidth = 2.5;
                             ctx.stroke();
                         } else if (p.geometry) {
-                            ctx.strokeStyle = color;
+                            ctx.strokeStyle = lineColor;
                             ctx.lineWidth = 4;
                             ctx.globalAlpha = 0.9;
                             ctx.setLineDash([8, 5]);
