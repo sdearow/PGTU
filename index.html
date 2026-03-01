@@ -859,6 +859,10 @@
             <h3 id="modal-title">Aggiungi Proposta</h3>
             <div class="modal-road-name" id="modal-road-name"></div>
             <div id="modal-type-badge" class="modal-type-badge"></div>
+            <div id="modal-name-field" style="margin-top:8px;display:none;">
+                <label style="font-size:12px;color:#666;font-weight:600;">Nome strada:</label>
+                <input type="text" id="modal-street-name" placeholder="Inserisci il nome della strada..." style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;margin-top:3px;">
+            </div>
             <div style="margin-top:8px">
                 <label style="font-size:12px;color:#666;font-weight:600;">Note:</label>
                 <textarea id="modal-notes" placeholder="Inserisci le note per questa proposta..."></textarea>
@@ -1247,7 +1251,11 @@
         var modalNotes = document.getElementById('modal-notes');
         var modalCallback = null;
 
-        function showNotesModal(type, roadName, callback, existingNotes) {
+        var modalStreetName = document.getElementById('modal-street-name');
+        var modalNameField = document.getElementById('modal-name-field');
+        var modalShowNameField = false;
+
+        function showNotesModal(type, roadName, callback, existingNotes, showNameInput) {
             var isElim = type === 'eliminazione';
             document.getElementById('modal-title').textContent = existingNotes !== undefined && existingNotes !== '' ? 'Modifica Note' : 'Aggiungi Proposta';
             document.getElementById('modal-road-name').textContent = roadName;
@@ -1255,13 +1263,26 @@
             badge.textContent = isElim ? 'Eliminazione' : 'Inserimento';
             badge.style.background = isElim ? COLOR_ELIM : COLOR_INS;
             modalNotes.value = existingNotes || '';
+            modalShowNameField = !!showNameInput;
+            modalNameField.style.display = modalShowNameField ? 'block' : 'none';
+            modalStreetName.value = '';
             modalCallback = callback;
             modalOverlay.classList.add('visible');
-            setTimeout(function() { modalNotes.focus(); }, 50);
+            if (modalShowNameField) {
+                setTimeout(function() { modalStreetName.focus(); }, 50);
+            } else {
+                setTimeout(function() { modalNotes.focus(); }, 50);
+            }
         }
 
         document.getElementById('modal-save').addEventListener('click', function() {
-            if (modalCallback) modalCallback(modalNotes.value);
+            if (modalCallback) {
+                if (modalShowNameField) {
+                    modalCallback(modalNotes.value, modalStreetName.value.trim());
+                } else {
+                    modalCallback(modalNotes.value);
+                }
+            }
             modalOverlay.classList.remove('visible');
             modalCallback = null;
         });
@@ -1509,11 +1530,12 @@
             var latlng = e.latlng;
             var currentEditMode = editMode;
 
-            showNotesModal(currentEditMode, 'Lat: ' + latlng.lat.toFixed(5) + ', Lon: ' + latlng.lng.toFixed(5), function(notes) {
+            showNotesModal(currentEditMode, 'Lat: ' + latlng.lat.toFixed(5) + ', Lon: ' + latlng.lng.toFixed(5), function(notes, streetName) {
+                var defaultName = 'Punto ' + (currentEditMode === 'eliminazione' ? 'Eliminazione' : 'Inserimento');
                 var proposta = {
                     id: generateId(),
                     type: currentEditMode,
-                    name: 'Punto ' + (currentEditMode === 'eliminazione' ? 'Eliminazione' : 'Inserimento'),
+                    name: streetName || defaultName,
                     source: 'Punto manuale',
                     flussi: '',
                     municipio: '',
@@ -1528,7 +1550,7 @@
                 proposte.push(proposta);
                 saveProposte(proposte);
                 renderProposte();
-            });
+            }, '', true);
         });
 
         // DRAW MODE: preview line following mouse
@@ -1631,139 +1653,213 @@
         // REPORT GENERATION
         // =====================================================
 
-        // --- Canvas map renderer for report images ---
+        // --- OSM tile helpers for canvas rendering ---
+        function lng2tile(lng, zoom) { return Math.floor((lng + 180) / 360 * Math.pow(2, zoom)); }
+        function lat2tile(lat, zoom) { return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom)); }
+        function tile2lng(x, zoom) { return x / Math.pow(2, zoom) * 360 - 180; }
+        function tile2lat(y, zoom) { var n = Math.PI - 2 * Math.PI * y / Math.pow(2, zoom); return 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))); }
+
+        // Web-Mercator projection helpers (lat/lng to pixel at given zoom)
+        function lngToMercX(lng, zoom) {
+            return ((lng + 180) / 360) * 256 * Math.pow(2, zoom);
+        }
+        function latToMercY(lat, zoom) {
+            var sinLat = Math.sin(lat * Math.PI / 180);
+            return (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom);
+        }
+
+        function loadTileImage(tileUrl) {
+            return new Promise(function(resolve) {
+                var img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = function() { resolve(img); };
+                img.onerror = function() { resolve(null); };
+                img.src = tileUrl;
+            });
+        }
+
+        // --- Canvas map renderer for report images (async, with OSM tiles) ---
         function renderMunMapImage(munNum, munProposte, width, height) {
-            var canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            var ctx = canvas.getContext('2d');
-            var pad = 20;
+            return new Promise(function(resolve) {
+                var canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                var ctx = canvas.getContext('2d');
+                var pad = 20;
 
-            // Find municipio boundary geometry
-            var munGeom = null;
-            layerMunicipii.eachLayer(function(layer) {
-                var props = layer.feature.properties;
-                if (String(props.Numero || props.Attuale || '') === String(munNum)) {
-                    munGeom = layer.feature.geometry;
-                }
-            });
-
-            // Collect all coordinates for bounding box
-            var allLngs = [], allLats = [];
-            function collectCoords(coords) {
-                coords.forEach(function(c) {
-                    if (Array.isArray(c[0])) collectCoords(c);
-                    else { allLngs.push(c[0]); allLats.push(c[1]); }
+                // Find municipio boundary geometry
+                var munGeom = null;
+                layerMunicipii.eachLayer(function(layer) {
+                    var props = layer.feature.properties;
+                    if (String(props.Numero || props.Attuale || '') === String(munNum)) {
+                        munGeom = layer.feature.geometry;
+                    }
                 });
-            }
-            if (munGeom) collectCoords(munGeom.coordinates);
-            munProposte.forEach(function(p) {
-                if (p.geometry) collectCoords(p.geometry.coordinates ? [p.geometry.coordinates] : []);
-                if (p.geometry && p.geometry.type !== 'Point') collectCoords(p.geometry.coordinates);
-            });
 
-            if (allLngs.length === 0) return '';
-
-            var minLng = Math.min.apply(null, allLngs), maxLng = Math.max.apply(null, allLngs);
-            var minLat = Math.min.apply(null, allLats), maxLat = Math.max.apply(null, allLats);
-            // Add 5% padding to bounds
-            var dLng = (maxLng - minLng) * 0.05 || 0.005;
-            var dLat = (maxLat - minLat) * 0.05 || 0.005;
-            minLng -= dLng; maxLng += dLng; minLat -= dLat; maxLat += dLat;
-
-            var drawW = width - 2 * pad, drawH = height - 2 * pad;
-            // Mercator-like scaling: adjust for latitude
-            var midLat = (minLat + maxLat) / 2;
-            var cosLat = Math.cos(midLat * Math.PI / 180);
-            var lngSpan = (maxLng - minLng) * cosLat;
-            var latSpan = maxLat - minLat;
-            var scale = Math.min(drawW / lngSpan, drawH / latSpan);
-            var offX = pad + (drawW - lngSpan * scale) / 2;
-            var offY = pad + (drawH - latSpan * scale) / 2;
-
-            function projX(lng) { return offX + (lng - minLng) * cosLat * scale; }
-            function projY(lat) { return offY + (maxLat - lat) * scale; }
-
-            // Background
-            ctx.fillStyle = '#f0f2f5';
-            ctx.fillRect(0, 0, width, height);
-
-            // Draw municipio boundary
-            if (munGeom) {
-                ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-                ctx.fillStyle = 'rgba(0,121,255,0.08)';
-                ctx.lineWidth = 2;
-                function drawPolygonRings(rings) {
-                    rings.forEach(function(ring) {
-                        ctx.beginPath();
-                        ring.forEach(function(c, i) {
-                            if (i === 0) ctx.moveTo(projX(c[0]), projY(c[1]));
-                            else ctx.lineTo(projX(c[0]), projY(c[1]));
-                        });
-                        ctx.closePath();
-                        ctx.fill();
-                        ctx.stroke();
+                // Collect all coordinates for bounding box
+                var allLngs = [], allLats = [];
+                function collectCoords(coords) {
+                    coords.forEach(function(c) {
+                        if (Array.isArray(c[0])) collectCoords(c);
+                        else { allLngs.push(c[0]); allLats.push(c[1]); }
                     });
                 }
-                if (munGeom.type === 'MultiPolygon') {
-                    munGeom.coordinates.forEach(function(poly) { drawPolygonRings(poly); });
-                } else if (munGeom.type === 'Polygon') {
-                    drawPolygonRings(munGeom.coordinates);
-                }
-            }
+                if (munGeom) collectCoords(munGeom.coordinates);
+                munProposte.forEach(function(p) {
+                    if (p.geometry) collectCoords(p.geometry.coordinates ? [p.geometry.coordinates] : []);
+                    if (p.geometry && p.geometry.type !== 'Point') collectCoords(p.geometry.coordinates);
+                });
 
-            // Draw proposte
-            munProposte.forEach(function(p) {
-                var isElim = p.type === 'eliminazione';
-                var color = isElim ? '#e74c3c' : '#006400';
-                if (p.geometry && p.geometry.type === 'Point') {
-                    var cx = projX(p.geometry.coordinates[0]);
-                    var cy = projY(p.geometry.coordinates[1]);
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-                    ctx.fillStyle = color;
-                    ctx.globalAlpha = 0.85;
-                    ctx.fill();
-                    ctx.globalAlpha = 1;
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                } else if (p.geometry) {
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 4;
-                    ctx.globalAlpha = 0.9;
-                    ctx.setLineDash([8, 5]);
-                    function drawLineCoords(coords) {
-                        ctx.beginPath();
-                        coords.forEach(function(c, i) {
-                            if (i === 0) ctx.moveTo(projX(c[0]), projY(c[1]));
-                            else ctx.lineTo(projX(c[0]), projY(c[1]));
-                        });
-                        ctx.stroke();
+                if (allLngs.length === 0) { resolve(''); return; }
+
+                var minLng = Math.min.apply(null, allLngs), maxLng = Math.max.apply(null, allLngs);
+                var minLat = Math.min.apply(null, allLats), maxLat = Math.max.apply(null, allLats);
+                var dLng = (maxLng - minLng) * 0.05 || 0.005;
+                var dLat = (maxLat - minLat) * 0.05 || 0.005;
+                minLng -= dLng; maxLng += dLng; minLat -= dLat; maxLat += dLat;
+
+                var drawW = width - 2 * pad, drawH = height - 2 * pad;
+
+                // Choose zoom level so tiles cover the area well
+                var zoom = 12;
+                for (var z = 17; z >= 1; z--) {
+                    var px0 = lngToMercX(minLng, z), px1 = lngToMercX(maxLng, z);
+                    var py0 = latToMercY(maxLat, z), py1 = latToMercY(minLat, z);
+                    if ((px1 - px0) <= drawW * 1.5 && (py1 - py0) <= drawH * 1.5) {
+                        zoom = z; break;
                     }
-                    if (p.geometry.type === 'LineString') {
-                        drawLineCoords(p.geometry.coordinates);
-                    } else if (p.geometry.type === 'MultiLineString') {
-                        p.geometry.coordinates.forEach(drawLineCoords);
-                    }
-                    ctx.setLineDash([]);
-                    ctx.globalAlpha = 1;
                 }
+
+                // Compute Mercator pixel bounds at chosen zoom
+                var mercX0 = lngToMercX(minLng, zoom), mercX1 = lngToMercX(maxLng, zoom);
+                var mercY0 = latToMercY(maxLat, zoom), mercY1 = latToMercY(minLat, zoom);
+                var mercW = mercX1 - mercX0, mercH = mercY1 - mercY0;
+                var scaleF = Math.min(drawW / mercW, drawH / mercH);
+                var offX = pad + (drawW - mercW * scaleF) / 2;
+                var offY = pad + (drawH - mercH * scaleF) / 2;
+
+                function projX(lng) { return offX + (lngToMercX(lng, zoom) - mercX0) * scaleF; }
+                function projY(lat) { return offY + (latToMercY(lat, zoom) - mercY0) * scaleF; }
+
+                // Background
+                ctx.fillStyle = '#f0f2f5';
+                ctx.fillRect(0, 0, width, height);
+
+                // Determine which tiles to load
+                var tileX0 = lng2tile(minLng, zoom), tileX1 = lng2tile(maxLng, zoom);
+                var tileY0 = lat2tile(maxLat, zoom), tileY1 = lat2tile(minLat, zoom);
+                var tilePromises = [];
+                for (var tx = tileX0; tx <= tileX1; tx++) {
+                    for (var ty = tileY0; ty <= tileY1; ty++) {
+                        (function(tx, ty) {
+                            var url = 'https://tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
+                            tilePromises.push(loadTileImage(url).then(function(img) {
+                                return { img: img, tx: tx, ty: ty };
+                            }));
+                        })(tx, ty);
+                    }
+                }
+
+                Promise.all(tilePromises).then(function(tiles) {
+                    // Draw tiles
+                    tiles.forEach(function(t) {
+                        if (!t.img) return;
+                        var tilePxX = t.tx * 256;
+                        var tilePxY = t.ty * 256;
+                        var dx = offX + (tilePxX - mercX0) * scaleF;
+                        var dy = offY + (tilePxY - mercY0) * scaleF;
+                        var dw = 256 * scaleF;
+                        var dh = 256 * scaleF;
+                        ctx.drawImage(t.img, dx, dy, dw, dh);
+                    });
+
+                    // Draw municipio boundary
+                    if (munGeom) {
+                        ctx.strokeStyle = 'rgba(44,62,80,0.6)';
+                        ctx.fillStyle = 'rgba(0,121,255,0.1)';
+                        ctx.lineWidth = 2.5;
+                        function drawPolygonRings(rings) {
+                            rings.forEach(function(ring) {
+                                ctx.beginPath();
+                                ring.forEach(function(c, i) {
+                                    if (i === 0) ctx.moveTo(projX(c[0]), projY(c[1]));
+                                    else ctx.lineTo(projX(c[0]), projY(c[1]));
+                                });
+                                ctx.closePath();
+                                ctx.fill();
+                                ctx.stroke();
+                            });
+                        }
+                        if (munGeom.type === 'MultiPolygon') {
+                            munGeom.coordinates.forEach(function(poly) { drawPolygonRings(poly); });
+                        } else if (munGeom.type === 'Polygon') {
+                            drawPolygonRings(munGeom.coordinates);
+                        }
+                    }
+
+                    // Draw proposte
+                    munProposte.forEach(function(p) {
+                        var isElim = p.type === 'eliminazione';
+                        var color = isElim ? '#e74c3c' : '#006400';
+                        if (p.geometry && p.geometry.type === 'Point') {
+                            var cx = projX(p.geometry.coordinates[0]);
+                            var cy = projY(p.geometry.coordinates[1]);
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                            ctx.fillStyle = color;
+                            ctx.globalAlpha = 0.9;
+                            ctx.fill();
+                            ctx.globalAlpha = 1;
+                            ctx.strokeStyle = '#fff';
+                            ctx.lineWidth = 2.5;
+                            ctx.stroke();
+                        } else if (p.geometry) {
+                            ctx.strokeStyle = color;
+                            ctx.lineWidth = 4;
+                            ctx.globalAlpha = 0.9;
+                            ctx.setLineDash([8, 5]);
+                            function drawLineCoords(coords) {
+                                ctx.beginPath();
+                                coords.forEach(function(c, i) {
+                                    if (i === 0) ctx.moveTo(projX(c[0]), projY(c[1]));
+                                    else ctx.lineTo(projX(c[0]), projY(c[1]));
+                                });
+                                ctx.stroke();
+                            }
+                            if (p.geometry.type === 'LineString') {
+                                drawLineCoords(p.geometry.coordinates);
+                            } else if (p.geometry.type === 'MultiLineString') {
+                                p.geometry.coordinates.forEach(drawLineCoords);
+                            }
+                            ctx.setLineDash([]);
+                            ctx.globalAlpha = 1;
+                        }
+                    });
+
+                    // Legend background
+                    var legendY = height - 8;
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                    ctx.fillRect(pad - 4, legendY - 16, 200, 22);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.fillRect(pad, legendY - 6, 16, 3);
+                    ctx.fillStyle = '#555';
+                    ctx.fillText('Eliminazione', pad + 20, legendY);
+                    ctx.fillStyle = '#006400';
+                    ctx.fillRect(pad + 100, legendY - 6, 16, 3);
+                    ctx.fillStyle = '#555';
+                    ctx.fillText('Inserimento', pad + 120, legendY);
+
+                    // OSM attribution
+                    ctx.font = '9px sans-serif';
+                    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                    ctx.textAlign = 'right';
+                    ctx.fillText('\u00A9 OpenStreetMap contributors', width - pad, height - 4);
+                    ctx.textAlign = 'left';
+
+                    resolve(canvas.toDataURL('image/png'));
+                });
             });
-
-            // Legend
-            var legendY = height - 14;
-            ctx.font = '10px sans-serif';
-            ctx.fillStyle = '#e74c3c';
-            ctx.fillRect(pad, legendY - 6, 16, 3);
-            ctx.fillStyle = '#555';
-            ctx.fillText('Eliminazione', pad + 20, legendY);
-            ctx.fillStyle = '#006400';
-            ctx.fillRect(pad + 100, legendY - 6, 16, 3);
-            ctx.fillStyle = '#555';
-            ctx.fillText('Inserimento', pad + 120, legendY);
-
-            return canvas.toDataURL('image/png');
         }
 
         // --- Merge same-road proposals ---
@@ -1879,12 +1975,18 @@
             var totLines = proposte.filter(function(p) { return p.geometry && p.geometry.type !== 'Point'; }).length;
             var totPoints = proposte.filter(function(p) { return p.geometry && p.geometry.type === 'Point'; }).length;
 
-            // Pre-render map images for each municipio
-            var munImages = {};
+            // Pre-render map images for each municipio (async - loads OSM tiles)
+            var munImagePromises = {};
             munKeys.forEach(function(munNum) {
                 if (munNum === 'ND') return;
-                munImages[munNum] = renderMunMapImage(munNum, byMunicipio[munNum], 860, 400);
+                munImagePromises[munNum] = renderMunMapImage(munNum, byMunicipio[munNum], 860, 400);
             });
+
+            // Wait for all map images to load, then build report
+            var promiseKeys = Object.keys(munImagePromises);
+            Promise.all(promiseKeys.map(function(k) { return munImagePromises[k]; })).then(function(results) {
+            var munImages = {};
+            promiseKeys.forEach(function(k, i) { munImages[k] = results[i]; });
 
             // Build HTML report
             var h = '<!DOCTYPE html><html lang="it"><head><meta charset="utf-8">';
@@ -1994,6 +2096,7 @@
             a.download = 'report_proposte_pgtu_' + now.toISOString().slice(0, 10) + '.html';
             a.click();
             URL.revokeObjectURL(url);
+            }); // end Promise.all .then
         });
 
         function buildMergedTable(mergedItems) {
