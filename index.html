@@ -2065,7 +2065,8 @@
                         lunghezza: 0,
                         notes: [],
                         count: 0,
-                        type: p.type
+                        type: p.type,
+                        municipio: p.municipio || ''
                     };
                 }
                 roadMap[key].count++;
@@ -2078,6 +2079,7 @@
                 }
                 if (p.flussi && !roadMap[key].flussi) roadMap[key].flussi = p.flussi;
                 if (p.classificazione && !roadMap[key].classificazione) roadMap[key].classificazione = p.classificazione;
+                if (p.municipio && !roadMap[key].municipio) roadMap[key].municipio = p.municipio;
             });
 
             // Build merged list: roads first, then points/drawn
@@ -2142,14 +2144,6 @@
                 if (b === 'ND') return -1;
                 return parseInt(a) - parseInt(b);
             });
-
-            function getMunLabel(num) {
-                if (num === 'ND') return 'Non Assegnato';
-                for (var i = 0; i < municipi.length; i++) {
-                    if (String(municipi[i].numero) === String(num)) return municipi[i].label;
-                }
-                return 'Municipio ' + num;
-            }
 
             var now = new Date();
             var dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -2267,23 +2261,26 @@
             h += '<div class="summary-card"><div class="val" style="color:#2c3e50">' + munKeys.length + '</div><div class="lbl">Municipi Coinvolti</div></div>';
             h += '</div>';
 
-            // Compute advanced statistics: total km, km by type, distribution by classification
+            // Compute advanced statistics: total km, km by type, distribution by classification and municipio
             var totalKmElim = 0, totalKmIns = 0;
             var classDistElim = {}, classDistIns = {};
             // Use unique roads (merge same-name fragments)
             var allMergedElim = mergeProposte(proposte.filter(function(p) { return p.type === 'eliminazione'; }));
             var allMergedIns = mergeProposte(proposte.filter(function(p) { return p.type === 'inserimento'; }));
-            function accumulateStats(mergedList, kmAccum, classDist) {
+
+            function getItemLen(item) {
+                if (item.kind === 'road') return item.data.lunghezza || 0;
+                return item.data.lunghezza || calcGeoLength(item.data.geometry);
+            }
+            function getItemCf(item) {
+                return (item.kind === 'road' ? item.data.classificazione : item.data.classificazione) || '';
+            }
+
+            function accumulateStats(mergedList, classDist) {
                 var km = 0;
                 mergedList.forEach(function(item) {
-                    var len = 0, cf = '';
-                    if (item.kind === 'road') {
-                        len = item.data.lunghezza || 0;
-                        cf = item.data.classificazione || '';
-                    } else {
-                        len = item.data.lunghezza || calcGeoLength(item.data.geometry);
-                        cf = item.data.classificazione || '';
-                    }
+                    var len = getItemLen(item);
+                    var cf = getItemCf(item);
                     km += len;
                     if (cf) {
                         if (!classDist[cf]) classDist[cf] = { count: 0, km: 0 };
@@ -2293,8 +2290,8 @@
                 });
                 return km;
             }
-            totalKmElim = accumulateStats(allMergedElim, totalKmElim, classDistElim);
-            totalKmIns = accumulateStats(allMergedIns, totalKmIns, classDistIns);
+            totalKmElim = accumulateStats(allMergedElim, classDistElim);
+            totalKmIns = accumulateStats(allMergedIns, classDistIns);
             var totalKm = totalKmElim + totalKmIns;
 
             // Merge classification distributions
@@ -2313,6 +2310,18 @@
             Object.keys(classDistIns).forEach(function(cf) {
                 if (!allClassDist[cf]) allClassDist[cf] = { count: 0, km: 0, elimKm: 0, insKm: 0 };
                 allClassDist[cf].insKm = classDistIns[cf].km;
+            });
+
+            // Per-municipio km stats (computed from byMunicipio, using merged items to avoid double-counting fragments)
+            var munKmStats = {};
+            munKeys.forEach(function(munNum) {
+                var items = byMunicipio[munNum];
+                var mElim = mergeProposte(items.filter(function(p) { return p.type === 'eliminazione'; }));
+                var mIns = mergeProposte(items.filter(function(p) { return p.type === 'inserimento'; }));
+                var kmE = 0, kmI = 0;
+                mElim.forEach(function(item) { kmE += getItemLen(item); });
+                mIns.forEach(function(item) { kmI += getItemLen(item); });
+                munKmStats[munNum] = { kmElim: kmE, kmIns: kmI, kmTot: kmE + kmI, countElim: mElim.length, countIns: mIns.length };
             });
 
             // Advanced stats section
@@ -2351,6 +2360,27 @@
                 h += '</table>';
             }
 
+            // Per-municipio km distribution table
+            h += '<h3 style="font-size:14px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #2c3e50;color:#2c3e50;">Distribuzione per Municipio</h3>';
+            h += '<table class="prop-table">';
+            h += '<tr><th>Municipio</th><th>Proposte Elim.</th><th>Proposte Ins.</th><th>Km Elim.</th><th>Km Inserim.</th><th>Km Totali</th><th>% sul Totale</th></tr>';
+            munKeys.forEach(function(munNum) {
+                var s = munKmStats[munNum];
+                var munLabel = getMunLabel(munNum);
+                var pct = totalKm > 0 ? (s.kmTot / totalKm * 100).toFixed(1) : '0.0';
+                var barWidth = totalKm > 0 ? Math.round(s.kmTot / totalKm * 100) : 0;
+                h += '<tr>';
+                h += '<td><strong>' + munLabel + '</strong></td>';
+                h += '<td>' + s.countElim + '</td>';
+                h += '<td>' + s.countIns + '</td>';
+                h += '<td style="color:#e74c3c;">' + s.kmElim.toFixed(2) + '</td>';
+                h += '<td style="color:#006400;">' + s.kmIns.toFixed(2) + '</td>';
+                h += '<td>' + s.kmTot.toFixed(2) + '</td>';
+                h += '<td><div style="display:flex;align-items:center;gap:6px;"><div style="background:#3498db;height:10px;width:' + barWidth + 'px;border-radius:2px;min-width:2px;"></div> ' + pct + '%</div></td>';
+                h += '</tr>';
+            });
+            h += '</table>';
+
             h += '</div></div>';
 
             // Per-municipio sections
@@ -2361,12 +2391,13 @@
                 var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
                 var mergedElim = mergeProposte(munElim);
                 var mergedIns = mergeProposte(munIns);
+                var mStats = munKmStats[munNum] || { kmElim: 0, kmIns: 0, kmTot: 0 };
 
                 h += '<div class="mun-section">';
                 h += '<div class="mun-header"><h2>' + munLabel + '</h2>';
                 h += '<div class="mun-counts">';
-                if (munElim.length > 0) h += '<span class="count-elim">' + mergedElim.length + ' Eliminaz.</span>';
-                if (munIns.length > 0) h += '<span class="count-ins">' + mergedIns.length + ' Inserim.</span>';
+                if (mergedElim.length > 0) h += '<span class="count-elim">' + mergedElim.length + ' Eliminaz. (' + mStats.kmElim.toFixed(2) + ' km)</span>';
+                if (mergedIns.length > 0) h += '<span class="count-ins">' + mergedIns.length + ' Inserim. (' + mStats.kmIns.toFixed(2) + ' km)</span>';
                 h += '</div></div>';
 
                 // Map image
@@ -2404,9 +2435,28 @@
             }); // end Promise.all .then
         });
 
+        function getMunLabel(num) {
+            if (num === 'ND' || !num) return 'Non Assegnato';
+            for (var i = 0; i < municipi.length; i++) {
+                if (String(municipi[i].numero) === String(num)) return municipi[i].label;
+            }
+            return 'Municipio ' + num;
+        }
+
+        function formatMunicipiLabel(rawMun) {
+            if (!rawMun) return '&mdash;';
+            var parts = rawMun.split(/\s*[;,]\s*/);
+            return parts.map(function(m) { return getMunLabel(m.trim()); }).join(', ');
+        }
+
+        var emptyNotePlaceholder = 'Clicca per aggiungere note';
+        function emptyNoteHtml() {
+            return '<div class="notes-box" contenteditable="true" style="background:#fafafa;border-left-color:#ddd;color:#999;min-height:20px;" onfocus="if(this.textContent.trim()===\'' + emptyNotePlaceholder + '\'){this.textContent=\'\';this.style.color=\'#333\';this.style.background=\'#fffde7\';this.style.borderLeftColor=\'#ffc107\';}" onblur="if(!this.textContent.trim()){this.textContent=\'' + emptyNotePlaceholder + '\';this.style.color=\'#999\';this.style.background=\'#fafafa\';this.style.borderLeftColor=\'#ddd\';}">' + emptyNotePlaceholder + '</div>';
+        }
+
         function buildMergedTable(mergedItems) {
             var h = '<table class="prop-table">';
-            h += '<tr><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Class.</th><th>Km</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
+            h += '<tr><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Class.</th><th>Km</th><th>Municipio</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
             mergedItems.forEach(function(item, idx) {
                 if (item.kind === 'road') {
                     var d = item.data;
@@ -2420,7 +2470,7 @@
                             return '<div class="notes-box" contenteditable="true">' + n.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
                         }).join('<hr class="notes-separator">');
                     } else {
-                        notesHtml = '<div class="notes-box" contenteditable="true" style="background:#fafafa;border-left-color:#ddd;color:#999;min-height:20px;" onfocus="if(this.textContent.trim()===\'Clicca per aggiungere note\'){this.textContent=\'\';this.style.color=\'#333\';this.style.background=\'#fffde7\';this.style.borderLeftColor=\'#ffc107\';}" onblur="if(!this.textContent.trim()){this.textContent=\'Clicca per aggiungere note\';this.style.color=\'#999\';this.style.background=\'#fafafa\';this.style.borderLeftColor=\'#ddd\';}">Clicca per aggiungere note</div>';
+                        notesHtml = emptyNoteHtml();
                     }
                     h += '<tr>';
                     h += '<td>' + (idx + 1) + '</td>';
@@ -2428,6 +2478,7 @@
                     h += '<td>' + typeBadge + '</td>';
                     h += '<td>' + cfLabel + '</td>';
                     h += '<td>' + kmLabel + '</td>';
+                    h += '<td>' + formatMunicipiLabel(d.municipio) + '</td>';
                     h += '<td>' + (d.source || '&mdash;') + '</td>';
                     h += '<td>' + (d.flussi || '&mdash;') + '</td>';
                     h += '<td>' + notesHtml + '</td>';
@@ -2452,7 +2503,7 @@
                     if (p.notes && p.notes.trim()) {
                         notesHtml = '<div class="notes-box" contenteditable="true">' + p.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>';
                     } else {
-                        notesHtml = '<div class="notes-box" contenteditable="true" style="background:#fafafa;border-left-color:#ddd;color:#999;min-height:20px;" onfocus="if(this.textContent.trim()===\'Clicca per aggiungere note\'){this.textContent=\'\';this.style.color=\'#333\';this.style.background=\'#fffde7\';this.style.borderLeftColor=\'#ffc107\';}" onblur="if(!this.textContent.trim()){this.textContent=\'Clicca per aggiungere note\';this.style.color=\'#999\';this.style.background=\'#fafafa\';this.style.borderLeftColor=\'#ddd\';}">Clicca per aggiungere note</div>';
+                        notesHtml = emptyNoteHtml();
                     }
                     h += '<tr>';
                     h += '<td>' + (idx + 1) + '</td>';
@@ -2460,6 +2511,7 @@
                     h += '<td>' + typeBadge + '</td>';
                     h += '<td>' + pCf + '</td>';
                     h += '<td>' + pKm + '</td>';
+                    h += '<td>' + formatMunicipiLabel(p.municipio) + '</td>';
                     h += '<td>' + (p.source || '&mdash;') + '</td>';
                     h += '<td>' + (p.flussi || '&mdash;') + '</td>';
                     h += '<td>' + notesHtml + '</td>';
