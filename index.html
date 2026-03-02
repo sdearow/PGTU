@@ -2126,12 +2126,16 @@
                 }
             });
 
-            // Group by municipio
+            // Group by municipio (split multi-municipio entries like "7;8" into both)
             var byMunicipio = {};
             proposte.forEach(function(p) {
-                var mun = p.municipio || 'ND';
-                if (!byMunicipio[mun]) byMunicipio[mun] = [];
-                byMunicipio[mun].push(p);
+                var rawMun = (p.municipio || '').trim();
+                var munList = rawMun ? rawMun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
+                if (munList.length === 0) munList = ['ND'];
+                munList.forEach(function(mun) {
+                    if (!byMunicipio[mun]) byMunicipio[mun] = [];
+                    byMunicipio[mun].push(p);
+                });
             });
 
             var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
