@@ -2131,7 +2131,7 @@
             // Group by municipio (split multi-municipio entries like "7;8" into both)
             var byMunicipio = {};
             proposte.forEach(function(p) {
-                var rawMun = (p.municipio || '').trim();
+                var rawMun = String(p.municipio || '').trim();
                 var munList = rawMun ? rawMun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
                 if (munList.length === 0) munList = ['ND'];
                 munList.forEach(function(mun) {
@@ -2446,8 +2446,9 @@
         }
 
         function formatMunicipiLabel(rawMun) {
-            if (!rawMun) return '&mdash;';
-            var parts = rawMun.split(/\s*[;,]\s*/);
+            if (!rawMun && rawMun !== 0) return '&mdash;';
+            var s = String(rawMun);
+            var parts = s.split(/\s*[;,]\s*/);
             return parts.map(function(m) { return getMunLabel(m.trim()); }).join(', ');
         }
 
