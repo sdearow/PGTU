@@ -2295,7 +2295,9 @@
             h += '.btn-print:hover { background: #1a252f; }';
             h += '.edit-hint { text-align: center; font-size: 12px; color: #888; margin-bottom: 20px; padding: 8px 16px; background: #fffde7; border: 1px dashed #ffc107; border-radius: 6px; }';
             h += '.edit-hint strong { color: #f57c00; }';
-            h += '@media print { body { background: white; } .report-container { padding: 10px; } .mun-section { box-shadow: none; border: 1px solid #ddd; } .summary-card { box-shadow: none; border: 1px solid #ddd; } .report-toolbar { display: none; } .edit-hint { display: none; } [contenteditable] { background: none !important; box-shadow: none !important; } }';
+            h += '.btn-delete-row { background: none; border: none; color: #ccc; cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; line-height: 1; }';
+            h += '.btn-delete-row:hover { color: #e74c3c; background: #fdecea; }';
+            h += '@media print { body { background: white; } .report-container { padding: 10px; } .mun-section { box-shadow: none; border: 1px solid #ddd; } .summary-card { box-shadow: none; border: 1px solid #ddd; } .report-toolbar { display: none; } .edit-hint { display: none; } .btn-delete-row { display: none; } [contenteditable] { background: none !important; box-shadow: none !important; } }';
             h += '</style></head><body>';
             h += '<div class="report-container">';
 
@@ -2479,7 +2481,26 @@
             });
 
             h += '<div class="footer">Report generato automaticamente da PGTU Roma - Mappa Interattiva</div>';
-            h += '</div></body></html>';
+            h += '</div>';
+            h += '<script>';
+            h += 'function deleteReportRow(btn) {';
+            h += '  var row = btn.closest("tr");';
+            h += '  if (!row) return;';
+            h += '  var name = row.querySelector(".editable-name");';
+            h += '  var label = name ? name.textContent.trim() : "questa riga";';
+            h += '  if (!confirm("Eliminare \\\"" + label + "\\\" dal report?")) return;';
+            h += '  var table = row.closest("table");';
+            h += '  row.remove();';
+            h += '  if (table) {';
+            h += '    var rows = table.querySelectorAll("tr");';
+            h += '    for (var i = 1; i < rows.length; i++) {';
+            h += '      var numCell = rows[i].querySelector(".row-num");';
+            h += '      if (numCell) numCell.textContent = i;';
+            h += '    }';
+            h += '  }';
+            h += '}';
+            h += '<\/script>';
+            h += '</body></html>';
 
             var blob = new Blob([h], { type: 'text/html;charset=utf-8' });
             var url = URL.createObjectURL(blob);
@@ -2514,7 +2535,7 @@
 
         function buildMergedTable(mergedItems) {
             var h = '<table class="prop-table">';
-            h += '<tr><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Class.</th><th>Km</th><th>Municipio</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
+            h += '<tr><th></th><th>#</th><th>Nome / Descrizione</th><th>Tipo</th><th>Class.</th><th>Km</th><th>Municipio</th><th>Fonte</th><th>Flussi</th><th>Note</th></tr>';
             mergedItems.forEach(function(item, idx) {
                 if (item.kind === 'road') {
                     var d = item.data;
@@ -2531,7 +2552,8 @@
                         notesHtml = emptyNoteHtml();
                     }
                     h += '<tr>';
-                    h += '<td>' + (idx + 1) + '</td>';
+                    h += '<td><button class="btn-delete-row" onclick="deleteReportRow(this)" title="Elimina riga">&times;</button></td>';
+                    h += '<td class="row-num">' + (idx + 1) + '</td>';
                     h += '<td><strong class="editable-name" contenteditable="true">' + (d.name || 'N/D') + '</strong></td>';
                     h += '<td>' + typeBadge + '</td>';
                     h += '<td>' + cfLabel + '</td>';
@@ -2564,7 +2586,8 @@
                         notesHtml = emptyNoteHtml();
                     }
                     h += '<tr>';
-                    h += '<td>' + (idx + 1) + '</td>';
+                    h += '<td><button class="btn-delete-row" onclick="deleteReportRow(this)" title="Elimina riga">&times;</button></td>';
+                    h += '<td class="row-num">' + (idx + 1) + '</td>';
                     h += '<td><strong class="editable-name" contenteditable="true">' + (p.name || 'N/D') + '</strong>' + coords + '</td>';
                     h += '<td>' + typeBadge + '</td>';
                     h += '<td>' + pCf + '</td>';
