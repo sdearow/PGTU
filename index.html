@@ -832,6 +832,7 @@
                     <button class="edit-action-btn" id="btn-export-geojson" title="Esporta come GeoJSON per QGIS" style="background:#27ae60;color:white;">Esporta GeoJSON</button>
                     <button class="edit-action-btn" id="btn-export-shp" title="Esporta come Shapefile (ZIP) per QGIS" style="background:#2980b9;color:white;">Esporta SHP</button>
                     <button class="edit-action-btn" id="btn-report-proposte" title="Genera report HTML per municipio" style="background:#2c3e50;color:white;font-weight:600;">Report</button>
+                    <button class="edit-action-btn" id="btn-report-word" title="Esporta report Word (.doc) con proposte per municipio" style="background:#2b5797;color:white;font-weight:600;">Report Word</button>
                     <button class="edit-action-btn" id="btn-import-proposte" title="Importa proposte da JSON">Importa</button>
                     <button class="edit-action-btn" id="btn-clear-proposte" title="Cancella tutte le proposte">Cancella</button>
                 </div>
@@ -2511,6 +2512,171 @@
             URL.revokeObjectURL(url);
             }).catch(function(err) { alert('Errore generazione report (render): ' + err.message); console.error(err); }); // end Promise.all .then
           } catch(err) { alert('Errore generazione report: ' + err.message); console.error(err); }
+        });
+
+        // ── Word Report Export ──
+        document.getElementById('btn-report-word').addEventListener('click', function() {
+          try {
+            var proposte = loadProposte();
+            if (proposte.length === 0) { alert('Nessuna proposta da includere nel report.'); return; }
+
+            // Resolve municipio via spatial overlay (same logic as HTML report)
+            var municPolygons = [];
+            layerMunicipii.eachLayer(function(layer) {
+                try {
+                    var feat = layer.feature;
+                    if (feat && feat.geometry) municPolygons.push(feat);
+                } catch(e) {}
+            });
+            proposte.forEach(function(p) {
+                if (p.municipio) return;
+                var turfPt;
+                try {
+                    if (p.geometry && p.geometry.type === 'Point') {
+                        turfPt = turf.point(p.geometry.coordinates);
+                    } else if (p.geometry && p.geometry.coordinates) {
+                        var feat = turf.feature(p.geometry);
+                        turfPt = turf.centroid(feat);
+                        var inside = false;
+                        for (var ci = 0; ci < municPolygons.length; ci++) {
+                            if (turf.booleanPointInPolygon(turfPt, municPolygons[ci])) { inside = true; break; }
+                        }
+                        if (!inside) turfPt = turf.along(feat, turf.length(feat) / 2);
+                    }
+                } catch(e) { turfPt = null; }
+                if (!turfPt) return;
+                for (var mi = 0; mi < municPolygons.length; mi++) {
+                    try {
+                        if (turf.booleanPointInPolygon(turfPt, municPolygons[mi])) {
+                            var mprops = municPolygons[mi].properties;
+                            p.municipio = String(mprops.Numero || mprops.Attuale || '');
+                            break;
+                        }
+                    } catch(e) {}
+                }
+            });
+
+            // Fix drawn line names (same as HTML report)
+            proposte.forEach(function(p) {
+                if (!p.name || !/^Linea\s+(Eliminazione|Inserimento)\s+\(disegnata\)$/i.test(p.name)) return;
+                if (!p.notes || !p.notes.trim()) return;
+                var noteText = p.notes.trim();
+                var parenIdx = noteText.indexOf('(');
+                if (parenIdx > 0) { p.name = noteText.substring(0, parenIdx).trim(); p.notes = noteText.substring(parenIdx).trim(); }
+                else { p.name = noteText; p.notes = ''; }
+            });
+
+            // Group by municipio
+            var byMunicipio = {};
+            proposte.forEach(function(p) {
+                var rawMun = String(p.municipio || '').trim();
+                var munList = rawMun ? rawMun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
+                if (munList.length === 0) munList = ['ND'];
+                munList.forEach(function(mun) {
+                    if (!byMunicipio[mun]) byMunicipio[mun] = [];
+                    byMunicipio[mun].push(p);
+                });
+            });
+            var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
+                if (a === 'ND') return 1; if (b === 'ND') return -1;
+                return parseInt(a) - parseInt(b);
+            });
+
+            // Helper: get item notes as text
+            function getItemNotes(item) {
+                if (item.kind === 'road') {
+                    return item.data.notes.length > 0 ? item.data.notes.join('; ') : '';
+                }
+                return (item.data.notes || '').trim();
+            }
+
+            // Helper: get item name
+            function getItemName(item) {
+                return (item.kind === 'road' ? item.data.name : item.data.name) || 'N/D';
+            }
+
+            // Helper: get classification label
+            function getItemCf(item) {
+                var cf = item.kind === 'road' ? item.data.classificazione : item.data.classificazione;
+                return cf ? (classificaNames[cf] || cf) : '';
+            }
+
+            // Helper: get km
+            function getItemKm(item) {
+                if (item.kind === 'road') return item.data.lunghezza > 0 ? item.data.lunghezza.toFixed(2) : '';
+                var len = item.data.lunghezza || calcGeoLength(item.data.geometry);
+                return len > 0 ? len.toFixed(2) : '';
+            }
+
+            // Build Word-compatible HTML
+            var now = new Date();
+            var w = '';
+            w += '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">';
+            w += '<head><meta charset="utf-8">';
+            w += '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->';
+            w += '<style>';
+            w += 'body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #333; margin: 2cm; }';
+            w += 'h1 { font-size: 18pt; color: #2c3e50; border-bottom: 2pt solid #2c3e50; padding-bottom: 6pt; }';
+            w += 'h2 { font-size: 14pt; color: #2c3e50; margin-top: 24pt; border-bottom: 1pt solid #bdc3c7; padding-bottom: 4pt; }';
+            w += 'h3 { font-size: 12pt; margin-top: 12pt; margin-bottom: 6pt; }';
+            w += 'h3.elim { color: #c0392b; }';
+            w += 'h3.ins { color: #006400; }';
+            w += 'table { border-collapse: collapse; width: 100%; font-size: 10pt; margin-bottom: 12pt; }';
+            w += 'th { background: #f0f0f0; text-align: left; padding: 5pt 8pt; border: 1pt solid #bbb; font-weight: bold; font-size: 9pt; }';
+            w += 'td { padding: 4pt 8pt; border: 1pt solid #ddd; vertical-align: top; }';
+            w += 'tr:nth-child(even) td { background: #fafafa; }';
+            w += '.note { color: #666; font-style: italic; font-size: 9pt; }';
+            w += '.footer { margin-top: 30pt; font-size: 9pt; color: #999; text-align: center; border-top: 1pt solid #eee; padding-top: 8pt; }';
+            w += '</style></head><body>';
+
+            w += '<h1>Report Proposte di Modifica PGTU</h1>';
+            w += '<p>Piano Generale del Traffico Urbano &ndash; Roma Capitale</p>';
+            w += '<p style="font-size:9pt;color:#888;">Generato il ' + now.toLocaleDateString('it-IT') + ' alle ' + now.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit'}) + '</p>';
+
+            // Per-municipio sections
+            munKeys.forEach(function(munNum) {
+                var items = byMunicipio[munNum];
+                var munLabel = getMunLabel(munNum);
+                var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
+                var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
+                var mergedElim = mergeProposte(munElim);
+                var mergedIns = mergeProposte(munIns);
+
+                w += '<h2>' + munLabel + '</h2>';
+
+                function buildWordTable(mergedItems, typeLabel) {
+                    var t = '<h3 class="' + (typeLabel === 'Eliminazione' ? 'elim' : 'ins') + '">Proposte di ' + typeLabel + ' (' + mergedItems.length + ')</h3>';
+                    t += '<table>';
+                    t += '<tr><th>#</th><th>Nome</th><th>Classificazione</th><th>Km</th><th>Note</th></tr>';
+                    mergedItems.forEach(function(item, idx) {
+                        var notes = getItemNotes(item);
+                        t += '<tr>';
+                        t += '<td>' + (idx + 1) + '</td>';
+                        t += '<td>' + getItemName(item) + '</td>';
+                        t += '<td>' + getItemCf(item) + '</td>';
+                        t += '<td>' + getItemKm(item) + '</td>';
+                        t += '<td>' + (notes ? '<span class="note">' + notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>' : '') + '</td>';
+                        t += '</tr>';
+                    });
+                    t += '</table>';
+                    return t;
+                }
+
+                if (mergedElim.length > 0) w += buildWordTable(mergedElim, 'Eliminazione');
+                if (mergedIns.length > 0) w += buildWordTable(mergedIns, 'Inserimento');
+            });
+
+            w += '<div class="footer">Report generato automaticamente da PGTU Roma &ndash; Mappa Interattiva</div>';
+            w += '</body></html>';
+
+            var blob = new Blob(['\ufeff' + w], { type: 'application/msword' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'report_proposte_pgtu_' + now.toISOString().slice(0, 10) + '.doc';
+            a.click();
+            URL.revokeObjectURL(url);
+          } catch(err) { alert('Errore generazione report Word: ' + err.message); console.error(err); }
         });
 
         function getMunLabel(num) {
