@@ -751,6 +751,13 @@
                 <div class="legend-block" id="legend-strade-prov" style="display:none;">
                     <div class="legend-item"><span class="legend-line" style="background:#008000"></span> Strade Provinciali</div>
                 </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-extraurbane">
+                    <label for="toggle-extraurbane">Strade Extraurbane</label>
+                </div>
+                <div class="legend-block" id="legend-extraurbane" style="display:none;">
+                    <div class="legend-item"><span class="legend-line" style="background:#8B4513"></span> Strade Extraurbane (EX)</div>
+                </div>
             </div>
 
             <div class="control-section">
@@ -913,6 +920,9 @@
 
     <!-- Strade Provinciali -->
     <script src="data_strade_provinciali.js"></script>
+
+    <!-- Strade Extraurbane -->
+    <script src="data_extraurbane.js"></script>
 
     <!-- Excel data converted to JSON -->
     <script src="data_tabella1.js"></script>
@@ -1104,6 +1114,42 @@
                         html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#008000;color:white;">Strada Provinciale</th></tr>';
                         if (p.name) html += '<tr><td><strong>Nome</strong></td><td>' + p.name + '</td></tr>';
                         if (p.codice) html += '<tr><td><strong>Codice</strong></td><td>' + p.codice + '</td></tr>';
+                        html += '</table>';
+                        layer.bindPopup(html, { maxWidth: 340 });
+                    }
+                });
+            }
+        }
+
+        // Strade Extraurbane layer (off by default)
+        var layerExtraurbane = null;
+        var extraurbaneLoaded = false;
+        function ensureExtraurbaneLayer() {
+            if (extraurbaneLoaded) return;
+            extraurbaneLoaded = true;
+            if (typeof dataExtraurbane !== 'undefined') {
+                layerExtraurbane = L.geoJSON(dataExtraurbane, {
+                    style: function() {
+                        return {
+                            color: '#8B4513',
+                            weight: 3,
+                            opacity: 0.8,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        var p = feature.properties;
+                        var html = '<table class="popup-table">';
+                        html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#8B4513;color:white;">Strada Extraurbana</th></tr>';
+                        if (p.Toponomastica) html += '<tr><td><strong>Nome</strong></td><td>' + p.Toponomastica + '</td></tr>';
+                        if (p.Nome) html += '<tr><td><strong>Denominazione</strong></td><td>' + p.Nome + '</td></tr>';
+                        if (p.Classifica) html += '<tr><td><strong>Classificazione</strong></td><td>' + p.Classifica + '</td></tr>';
+                        if (p.Limiti) html += '<tr><td><strong>Limiti</strong></td><td>' + p.Limiti + '</td></tr>';
+                        if (p.Municipio && p.Municipio !== '-') html += '<tr><td><strong>Municipio</strong></td><td>' + p.Municipio + '</td></tr>';
+                        if (p['Grande_Viabilità_2019']) html += '<tr><td><strong>Grande Viabilit&agrave;</strong></td><td>' + p['Grande_Viabilità_2019'] + '</td></tr>';
+                        if (p.TPL) html += '<tr><td><strong>TPL</strong></td><td>' + p.TPL + '</td></tr>';
+                        if (p.Note_2025 && p.Note_2025 !== '-') html += '<tr><td><strong>Note 2025</strong></td><td>' + p.Note_2025 + '</td></tr>';
                         html += '</table>';
                         layer.bindPopup(html, { maxWidth: 340 });
                     }
@@ -3510,6 +3556,24 @@
             } else {
                 if (layerStradeProvinciali) map.removeLayer(layerStradeProvinciali);
                 document.getElementById('legend-strade-prov').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-extraurbane').addEventListener('change', function() {
+            if (this.checked) {
+                ensureExtraurbaneLayer();
+                if (layerExtraurbane) {
+                    map.addLayer(layerExtraurbane);
+                    // Extraurbane go behind traffic and PGTU layers
+                    if (map.hasLayer(layerLowTraffic)) layerLowTraffic.bringToFront();
+                    if (map.hasLayer(layerHighTraffic)) layerHighTraffic.bringToFront();
+                    if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                    bringProposteFront();
+                }
+                document.getElementById('legend-extraurbane').style.display = '';
+            } else {
+                if (layerExtraurbane) map.removeLayer(layerExtraurbane);
+                document.getElementById('legend-extraurbane').style.display = 'none';
             }
         });
 
