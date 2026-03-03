@@ -744,6 +744,13 @@
                     <div class="legend-item"><span class="legend-line" style="background:#ff9400"></span> Quartiere (Q)</div>
                     <div class="legend-item"><span class="legend-line" style="background:#e4ff00"></span> Interzonali (IZ)</div>
                 </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-strade-prov">
+                    <label for="toggle-strade-prov">Strade Provinciali</label>
+                </div>
+                <div class="legend-block" id="legend-strade-prov" style="display:none;">
+                    <div class="legend-item"><span class="legend-line" style="background:#008000"></span> Strade Provinciali</div>
+                </div>
             </div>
 
             <div class="control-section">
@@ -833,6 +840,7 @@
                     <button class="edit-action-btn" id="btn-export-shp" title="Esporta come Shapefile (ZIP) per QGIS" style="background:#2980b9;color:white;">Esporta SHP</button>
                     <button class="edit-action-btn" id="btn-report-proposte" title="Genera report HTML per municipio" style="background:#2c3e50;color:white;font-weight:600;">Report</button>
                     <button class="edit-action-btn" id="btn-report-word" title="Esporta report Word (.doc) con proposte per municipio" style="background:#2b5797;color:white;font-weight:600;">Report Word</button>
+                    <button class="edit-action-btn" id="btn-report-excel" title="Esporta report Excel (.xlsx) con proposte per municipio" style="background:#217346;color:white;font-weight:600;">Report Excel</button>
                     <button class="edit-action-btn" id="btn-import-proposte" title="Importa proposte da JSON">Importa</button>
                     <button class="edit-action-btn" id="btn-clear-proposte" title="Cancella tutte le proposte">Cancella</button>
                 </div>
@@ -902,6 +910,9 @@
 
     <!-- ATAC lines -->
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/LineeATAC_4.js"></script>
+
+    <!-- Strade Provinciali -->
+    <script src="data_strade_provinciali.js"></script>
 
     <!-- Excel data converted to JSON -->
     <script src="data_tabella1.js"></script>
@@ -1069,6 +1080,36 @@
         var layerMunicipii = L.geoJSON(json_Municipi_1, {
             style: defaultMunicipiStyle
         }).addTo(map);
+
+        // Strade Provinciali layer (off by default, behind all other layers)
+        var layerStradeProvinciali = null;
+        var stradeProvLoaded = false;
+        function ensureStradeProvLayer() {
+            if (stradeProvLoaded) return;
+            stradeProvLoaded = true;
+            if (typeof json_StradeProvinciali !== 'undefined') {
+                layerStradeProvinciali = L.geoJSON(json_StradeProvinciali, {
+                    style: function() {
+                        return {
+                            color: '#008000',
+                            weight: 2.5,
+                            opacity: 0.7,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        var p = feature.properties;
+                        var html = '<table class="popup-table">';
+                        html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#008000;color:white;">Strada Provinciale</th></tr>';
+                        if (p.name) html += '<tr><td><strong>Nome</strong></td><td>' + p.name + '</td></tr>';
+                        if (p.codice) html += '<tr><td><strong>Codice</strong></td><td>' + p.codice + '</td></tr>';
+                        html += '</table>';
+                        layer.bindPopup(html, { maxWidth: 340 });
+                    }
+                });
+            }
+        }
 
         var layerLowTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_3, {
             style: styleLowTraffic,
@@ -2679,6 +2720,144 @@
           } catch(err) { alert('Errore generazione report Word: ' + err.message); console.error(err); }
         });
 
+        // ── Excel Report Export ──
+        document.getElementById('btn-report-excel').addEventListener('click', function() {
+          // Lazy-load SheetJS from CDN
+          function doExcel() {
+            try {
+              var proposte = loadProposte();
+              if (proposte.length === 0) { alert('Nessuna proposta da includere nel report.'); return; }
+
+              // Resolve municipio via spatial overlay
+              var municPolygons = [];
+              layerMunicipii.eachLayer(function(layer) {
+                  try { var feat = layer.feature; if (feat && feat.geometry) municPolygons.push(feat); } catch(e) {}
+              });
+              proposte.forEach(function(p) {
+                  if (p.municipio) return;
+                  var turfPt;
+                  try {
+                      if (p.geometry && p.geometry.type === 'Point') turfPt = turf.point(p.geometry.coordinates);
+                      else if (p.geometry && p.geometry.coordinates) {
+                          var feat = turf.feature(p.geometry);
+                          turfPt = turf.centroid(feat);
+                          var inside = false;
+                          for (var ci = 0; ci < municPolygons.length; ci++) {
+                              if (turf.booleanPointInPolygon(turfPt, municPolygons[ci])) { inside = true; break; }
+                          }
+                          if (!inside) turfPt = turf.along(feat, turf.length(feat) / 2);
+                      }
+                  } catch(e) { turfPt = null; }
+                  if (!turfPt) return;
+                  for (var mi = 0; mi < municPolygons.length; mi++) {
+                      try {
+                          if (turf.booleanPointInPolygon(turfPt, municPolygons[mi])) {
+                              p.municipio = String(municPolygons[mi].properties.Numero || municPolygons[mi].properties.Attuale || '');
+                              break;
+                          }
+                      } catch(e) {}
+                  }
+              });
+
+              // Fix drawn line names
+              proposte.forEach(function(p) {
+                  if (!p.name || !/^Linea\s+(Eliminazione|Inserimento)\s+\(disegnata\)$/i.test(p.name)) return;
+                  if (!p.notes || !p.notes.trim()) return;
+                  var noteText = p.notes.trim();
+                  var parenIdx = noteText.indexOf('(');
+                  if (parenIdx > 0) { p.name = noteText.substring(0, parenIdx).trim(); p.notes = noteText.substring(parenIdx).trim(); }
+                  else { p.name = noteText; p.notes = ''; }
+              });
+
+              // Group by municipio
+              var byMunicipio = {};
+              proposte.forEach(function(p) {
+                  var rawMun = String(p.municipio || '').trim();
+                  var munList = rawMun ? rawMun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
+                  if (munList.length === 0) munList = ['ND'];
+                  munList.forEach(function(mun) {
+                      if (!byMunicipio[mun]) byMunicipio[mun] = [];
+                      byMunicipio[mun].push(p);
+                  });
+              });
+              var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
+                  if (a === 'ND') return 1; if (b === 'ND') return -1;
+                  return parseInt(a) - parseInt(b);
+              });
+
+              // Build Excel workbook
+              var wb = XLSX.utils.book_new();
+
+              munKeys.forEach(function(munNum) {
+                  var items = byMunicipio[munNum];
+                  var munLabel = getMunLabel(munNum);
+                  var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
+                  var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
+                  var mergedElim = mergeProposte(munElim);
+                  var mergedIns = mergeProposte(munIns);
+
+                  function getItemRow(item, idx) {
+                      var name, cf, km, notes;
+                      if (item.kind === 'road') {
+                          name = item.data.name || 'N/D';
+                          cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
+                          km = item.data.lunghezza > 0 ? Math.round(item.data.lunghezza * 100) / 100 : '';
+                          notes = item.data.notes.length > 0 ? item.data.notes.join('; ') : '';
+                      } else {
+                          name = item.data.name || 'N/D';
+                          cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
+                          var len = item.data.lunghezza || calcGeoLength(item.data.geometry);
+                          km = len > 0 ? Math.round(len * 100) / 100 : '';
+                          notes = (item.data.notes || '').trim();
+                      }
+                      return [idx + 1, name, cf, km, notes];
+                  }
+
+                  var rows = [];
+                  if (mergedElim.length > 0) {
+                      rows.push(['PROPOSTE DI ELIMINAZIONE (' + mergedElim.length + ')', '', '', '', '']);
+                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Note']);
+                      mergedElim.forEach(function(item, idx) { rows.push(getItemRow(item, idx)); });
+                      rows.push([]); // empty separator row
+                  }
+                  if (mergedIns.length > 0) {
+                      rows.push(['PROPOSTE DI INSERIMENTO (' + mergedIns.length + ')', '', '', '', '']);
+                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Note']);
+                      mergedIns.forEach(function(item, idx) { rows.push(getItemRow(item, idx)); });
+                  }
+
+                  if (rows.length > 0) {
+                      var ws = XLSX.utils.aoa_to_sheet(rows);
+                      // Set column widths
+                      ws['!cols'] = [
+                          { wch: 5 },   // #
+                          { wch: 35 },  // Nome
+                          { wch: 18 },  // Classificazione
+                          { wch: 8 },   // Km
+                          { wch: 50 }   // Note
+                      ];
+                      // Sheet name max 31 chars
+                      var sheetName = munLabel.length > 31 ? munLabel.substring(0, 31) : munLabel;
+                      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                  }
+              });
+
+              var now = new Date();
+              XLSX.writeFile(wb, 'report_proposte_pgtu_' + now.toISOString().slice(0, 10) + '.xlsx');
+            } catch(err) { alert('Errore generazione report Excel: ' + err.message); console.error(err); }
+          }
+
+          if (typeof XLSX !== 'undefined') {
+              doExcel();
+          } else {
+              var script = document.createElement('script');
+              script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+              script.onload = doExcel;
+              script.onerror = function() { alert('Errore nel caricamento della libreria SheetJS. Verifica la connessione internet.'); };
+              document.head.appendChild(script);
+          }
+        });
+
         function getMunLabel(num) {
             if (num === 'ND' || !num) return 'Non Assegnato';
             for (var i = 0; i < municipi.length; i++) {
@@ -3298,6 +3477,24 @@
             } else {
                 map.removeLayer(layerPGTU);
                 document.getElementById('legend-pgtu').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-strade-prov').addEventListener('change', function() {
+            if (this.checked) {
+                ensureStradeProvLayer();
+                if (layerStradeProvinciali) {
+                    map.addLayer(layerStradeProvinciali);
+                    // Strade Provinciali go behind all other layers (just above municipii)
+                    if (map.hasLayer(layerLowTraffic)) layerLowTraffic.bringToFront();
+                    if (map.hasLayer(layerHighTraffic)) layerHighTraffic.bringToFront();
+                    if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                    bringProposteFront();
+                }
+                document.getElementById('legend-strade-prov').style.display = '';
+            } else {
+                if (layerStradeProvinciali) map.removeLayer(layerStradeProvinciali);
+                document.getElementById('legend-strade-prov').style.display = 'none';
             }
         });
 
