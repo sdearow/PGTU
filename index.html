@@ -2376,6 +2376,16 @@
                 return (item.kind === 'road' ? item.data.classificazione : item.data.classificazione) || '';
             }
 
+            // Filter: exclude piazze/larghi/etc. and already-classified roads from km stats
+            var kmExcludeNameRe = /^(piazza|piazzale|piazzetta|largo|larghi|rotonda|rotatoria)\b/i;
+            function includeInKmStats(item) {
+                var name = (item.kind === 'road' ? item.data.name : item.data.name) || '';
+                if (kmExcludeNameRe.test(name.trim())) return false;
+                var cf = getItemCf(item);
+                if (cf && cf.indexOf('-') === -1) return false;
+                return true;
+            }
+
             function accumulateStats(mergedList, classDist) {
                 var km = 0;
                 mergedList.forEach(function(item) {
@@ -2390,8 +2400,13 @@
                 });
                 return km;
             }
-            totalKmElim = accumulateStats(allMergedElim, classDistElim);
-            totalKmIns = accumulateStats(allMergedIns, classDistIns);
+            // Full km (for distribution tables)
+            var fullKmElim = accumulateStats(allMergedElim, classDistElim);
+            var fullKmIns = accumulateStats(allMergedIns, classDistIns);
+            var fullKm = fullKmElim + fullKmIns;
+            // Filtered km (for summary cards): exclude piazze/larghi and already-classified
+            allMergedElim.forEach(function(item) { if (includeInKmStats(item)) totalKmElim += getItemLen(item); });
+            allMergedIns.forEach(function(item) { if (includeInKmStats(item)) totalKmIns += getItemLen(item); });
             var totalKm = totalKmElim + totalKmIns;
 
             // Merge classification distributions
@@ -2419,8 +2434,8 @@
                 var mElim = mergeProposte(items.filter(function(p) { return p.type === 'eliminazione'; }));
                 var mIns = mergeProposte(items.filter(function(p) { return p.type === 'inserimento'; }));
                 var kmE = 0, kmI = 0;
-                mElim.forEach(function(item) { kmE += getItemLen(item); });
-                mIns.forEach(function(item) { kmI += getItemLen(item); });
+                mElim.forEach(function(item) { if (includeInKmStats(item)) kmE += getItemLen(item); });
+                mIns.forEach(function(item) { if (includeInKmStats(item)) kmI += getItemLen(item); });
                 munKmStats[munNum] = { kmElim: kmE, kmIns: kmI, kmTot: kmE + kmI, countElim: mElim.length, countIns: mIns.length };
             });
 
@@ -2431,7 +2446,7 @@
 
             // Total km cards
             h += '<div class="summary-grid" style="margin-bottom:16px;">';
-            h += '<div class="summary-card"><div class="val" style="font-size:22px;">' + totalKm.toFixed(2) + '</div><div class="lbl">Km Totali Modificati</div></div>';
+            h += '<div class="summary-card"><div class="val" style="font-size:22px;">' + totalKm.toFixed(2) + '</div><div class="lbl">Km Totali Modificati<br><span style="font-size:9px;color:#999;">(escluse piazze/larghi e strade gi\u00e0 classificate)</span></div></div>';
             h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#e74c3c;">' + totalKmElim.toFixed(2) + '</div><div class="lbl">Km Eliminazioni</div></div>';
             h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#006400;">' + totalKmIns.toFixed(2) + '</div><div class="lbl">Km Inserimenti</div></div>';
             h += '</div>';
@@ -2445,8 +2460,8 @@
                 classKeys.forEach(function(cf) {
                     var d = allClassDist[cf];
                     var cfName = classificaNames[cf] || cf;
-                    var pct = totalKm > 0 ? (d.km / totalKm * 100).toFixed(1) : '0.0';
-                    var barWidth = totalKm > 0 ? Math.round(d.km / totalKm * 100) : 0;
+                    var pct = fullKm > 0 ? (d.km / fullKm * 100).toFixed(1) : '0.0';
+                    var barWidth = fullKm > 0 ? Math.round(d.km / fullKm * 100) : 0;
                     h += '<tr>';
                     h += '<td><strong>' + cfName + '</strong></td>';
                     h += '<td>' + cf + '</td>';
