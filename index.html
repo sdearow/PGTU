@@ -858,6 +858,18 @@
                     <div class="legend-item"><span class="legend-line" style="background:#9c27b0"></span> 10-14 linee</div>
                     <div class="legend-item"><span class="legend-line" style="background:#1a237e"></span> 15+ linee</div>
                 </div>
+                <div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
+                    <div class="layer-toggle">
+                        <input type="checkbox" id="toggle-tpl5-no-pgtu">
+                        <label for="toggle-tpl5-no-pgtu" style="font-weight:600;color:#e65100;">&#9679; TPL 5+ non in Annesso D</label>
+                        <span id="tpl5-no-pgtu-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
+                    </div>
+                    <div class="layer-toggle" style="margin-top:3px;">
+                        <input type="checkbox" id="toggle-pgtu-no-tpl5">
+                        <label for="toggle-pgtu-no-tpl5" style="font-weight:600;color:#1565c0;">&#9679; Annesso D non in TPL 5+</label>
+                        <span id="pgtu-no-tpl5-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
+                    </div>
+                </div>
             </div>
 
             <!-- Proposte di Modifica -->
@@ -3831,6 +3843,168 @@
             } else {
                 if (layerTPL5) map.removeLayer(layerTPL5);
                 document.getElementById('legend-tpl5').style.display = 'none';
+            }
+        });
+
+        // =====================================================
+        // TPL5 vs Annesso D mismatch layers
+        // =====================================================
+        var layerTPL5noPGTU = L.layerGroup();
+        var layerPGTUnoTPL5 = L.layerGroup();
+        var mismatchComputed = false;
+
+        function computeMismatchLayers() {
+            if (mismatchComputed) return;
+            mismatchComputed = true;
+
+            var tplFeats = (typeof dataReteTPL5 !== 'undefined') ? dataReteTPL5.features : [];
+            var pgtuFeats = (typeof json_PGTUAnnessoD_5 !== 'undefined') ? json_PGTUAnnessoD_5.features : [];
+            if (!tplFeats.length || !pgtuFeats.length) return;
+
+            var MATCH_DIST = 0.0003; // ~33m
+            var SAMPLE_STEP = 0.0003;
+            var cellSize = MATCH_DIST * 2;
+
+            function sampleLine(coords) {
+                var pts = [];
+                for (var i = 0; i < coords.length; i++) {
+                    pts.push(coords[i]);
+                    if (i < coords.length - 1) {
+                        var dx = coords[i+1][0] - coords[i][0];
+                        var dy = coords[i+1][1] - coords[i][1];
+                        var d = Math.sqrt(dx*dx + dy*dy);
+                        var steps = Math.floor(d / SAMPLE_STEP);
+                        for (var s = 1; s < steps; s++) {
+                            pts.push([coords[i][0] + dx*s/steps, coords[i][1] + dy*s/steps]);
+                        }
+                    }
+                }
+                return pts;
+            }
+
+            function getCoords(f) {
+                if (f.geometry.type === 'LineString') return [f.geometry.coordinates];
+                if (f.geometry.type === 'MultiLineString') return f.geometry.coordinates;
+                return [];
+            }
+
+            // Build grid from PGTU sampled points
+            var pgtuGrid = {};
+            pgtuFeats.forEach(function(f, idx) {
+                getCoords(f).forEach(function(line) {
+                    sampleLine(line).forEach(function(pt) {
+                        var key = Math.floor(pt[0]/cellSize) + ',' + Math.floor(pt[1]/cellSize);
+                        if (!pgtuGrid[key]) pgtuGrid[key] = {};
+                        pgtuGrid[key][idx] = true;
+                    });
+                });
+            });
+
+            // Build grid from TPL5 sampled points
+            var tplGrid = {};
+            tplFeats.forEach(function(f, idx) {
+                sampleLine(f.geometry.coordinates).forEach(function(pt) {
+                    var key = Math.floor(pt[0]/cellSize) + ',' + Math.floor(pt[1]/cellSize);
+                    if (!tplGrid[key]) tplGrid[key] = {};
+                    tplGrid[key][idx] = true;
+                });
+            });
+
+            // Check TPL5 features against PGTU grid
+            var pgtuMatchedSet = {};
+            tplFeats.forEach(function(f, idx) {
+                var pts = sampleLine(f.geometry.coordinates);
+                var matchedPts = 0;
+                pts.forEach(function(pt) {
+                    var cx = Math.floor(pt[0]/cellSize);
+                    var cy = Math.floor(pt[1]/cellSize);
+                    for (var dx = -1; dx <= 1; dx++) {
+                        for (var dy = -1; dy <= 1; dy++) {
+                            var bucket = pgtuGrid[(cx+dx)+','+(cy+dy)];
+                            if (bucket) {
+                                matchedPts++;
+                                Object.keys(bucket).forEach(function(k) { pgtuMatchedSet[k] = true; });
+                                return;
+                            }
+                        }
+                    }
+                });
+                var ratio = pts.length > 0 ? matchedPts / pts.length : 0;
+                if (ratio < 0.3) {
+                    // TPL5 segment NOT in Annesso D
+                    var layer = L.geoJSON({ type: 'Feature', geometry: f.geometry, properties: f.properties }, {
+                        style: { color: '#e65100', weight: 4, opacity: 0.85, dashArray: '8,4' },
+                        onEachFeature: function(feat, lyr) {
+                            lyr.bindPopup('<div class="popup-title">TPL 5+ non in Annesso D</div>' +
+                                '<span class="popup-layer-badge" style="background:#e65100;">Mismatch</span>' +
+                                '<table class="popup-table">' +
+                                popupRow('Fascia', feat.properties.fascia + ' linee') +
+                                '</table>');
+                        }
+                    });
+                    layerTPL5noPGTU.addLayer(layer);
+                }
+            });
+
+            // Check PGTU features against TPL5 grid
+            pgtuFeats.forEach(function(f, idx) {
+                if (pgtuMatchedSet[idx]) return;
+                // Also check via TPL grid
+                var lines = getCoords(f);
+                var totalPts = 0, matchedPts = 0;
+                lines.forEach(function(line) {
+                    var pts = sampleLine(line);
+                    totalPts += pts.length;
+                    pts.forEach(function(pt) {
+                        var cx = Math.floor(pt[0]/cellSize);
+                        var cy = Math.floor(pt[1]/cellSize);
+                        for (var dx = -1; dx <= 1; dx++) {
+                            for (var dy = -1; dy <= 1; dy++) {
+                                if (tplGrid[(cx+dx)+','+(cy+dy)]) { matchedPts++; return; }
+                            }
+                        }
+                    });
+                });
+                var ratio = totalPts > 0 ? matchedPts / totalPts : 0;
+                if (ratio < 0.3) {
+                    var p = f.properties;
+                    var layer = L.geoJSON({ type: 'Feature', geometry: f.geometry, properties: p }, {
+                        style: { color: '#1565c0', weight: 4, opacity: 0.85, dashArray: '8,4' },
+                        onEachFeature: function(feat, lyr) {
+                            var pp = feat.properties;
+                            lyr.bindPopup('<div class="popup-title">Annesso D non in TPL 5+</div>' +
+                                '<span class="popup-layer-badge" style="background:#1565c0;">Mismatch</span>' +
+                                '<table class="popup-table">' +
+                                popupRow('Strada', pp.Toponomast || pp.Nome || '(senza nome)') +
+                                popupRow('Classificazione', (classificaNames[pp.Classifica] || pp.Classifica || '')) +
+                                '</table>');
+                        }
+                    });
+                    layerPGTUnoTPL5.addLayer(layer);
+                }
+            });
+
+            document.getElementById('tpl5-no-pgtu-count').textContent = '(' + layerTPL5noPGTU.getLayers().length + ')';
+            document.getElementById('pgtu-no-tpl5-count').textContent = '(' + layerPGTUnoTPL5.getLayers().length + ')';
+        }
+
+        document.getElementById('toggle-tpl5-no-pgtu').addEventListener('change', function() {
+            if (this.checked) {
+                computeMismatchLayers();
+                map.addLayer(layerTPL5noPGTU);
+                layerTPL5noPGTU.bringToFront();
+            } else {
+                map.removeLayer(layerTPL5noPGTU);
+            }
+        });
+
+        document.getElementById('toggle-pgtu-no-tpl5').addEventListener('change', function() {
+            if (this.checked) {
+                computeMismatchLayers();
+                map.addLayer(layerPGTUnoTPL5);
+                layerPGTUnoTPL5.bringToFront();
+            } else {
+                map.removeLayer(layerPGTUnoTPL5);
             }
         });
 
