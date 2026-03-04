@@ -824,6 +824,27 @@
                 <div class="legend-block" id="legend-atac" style="display:none">
                     <div class="legend-item"><span class="legend-line" style="background:#8b1a1a"></span> Linee bus/tram ATAC</div>
                 </div>
+                <div class="layer-toggle" style="margin-top:4px;">
+                    <input type="checkbox" id="toggle-tpl3">
+                    <label for="toggle-tpl3">Rete TPL (3+ linee)</label>
+                </div>
+                <div class="legend-block" id="legend-tpl3" style="display:none">
+                    <div class="legend-item"><span class="legend-line" style="background:#fdd835"></span> 3-4 linee</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#ff9800"></span> 5-6 linee</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#f44336"></span> 7-9 linee</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#9c27b0"></span> 10-14 linee</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#1a237e"></span> 15+ linee</div>
+                </div>
+                <div class="layer-toggle" style="margin-top:4px;">
+                    <input type="checkbox" id="toggle-tpl5">
+                    <label for="toggle-tpl5">Rete TPL (5+ linee)</label>
+                </div>
+                <div class="legend-block" id="legend-tpl5" style="display:none">
+                    <div class="legend-item"><span class="legend-line" style="background:#ff9800"></span> 5-6 linee</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#f44336"></span> 7-9 linee</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#9c27b0"></span> 10-14 linee</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#1a237e"></span> 15+ linee</div>
+                </div>
             </div>
 
             <!-- Proposte di Modifica -->
@@ -891,6 +912,8 @@
                     <button class="edit-action-btn btn-export-layer" data-layer="flussi-bassi" style="font-size:11px;padding:4px 8px;text-align:left;">Flussi Bassi (Tab. 1)</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="flussi-elevati" style="font-size:11px;padding:4px 8px;text-align:left;">Flussi Elevati (Tab. 2)</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="linee-atac" style="font-size:11px;padding:4px 8px;text-align:left;">Linee ATAC</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="rete-tpl-3" style="font-size:11px;padding:4px 8px;text-align:left;">Rete TPL (3+ linee)</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="rete-tpl-5" style="font-size:11px;padding:4px 8px;text-align:left;">Rete TPL (5+ linee)</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="proposte" style="font-size:11px;padding:4px 8px;text-align:left;">Proposte (eliminazioni + inserimenti)</button>
                 </div>
                 <div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
@@ -968,6 +991,10 @@
 
     <!-- Strade Extraurbane -->
     <script src="data_extraurbane.js"></script>
+
+    <!-- Rete TPL -->
+    <script src="data_rete_tpl_3.js"></script>
+    <script src="data_rete_tpl_5.js"></script>
 
     <!-- Excel data converted to JSON -->
     <script src="data_tabella1.js"></script>
@@ -1279,6 +1306,49 @@
                         html += popupRow('Attivo', p.Attivo === 'TRUE' ? 'S&igrave;' : 'No');
                         html += '</table>';
                         layer.bindPopup(html, { maxWidth: 340 });
+                    }
+                });
+            }
+        }
+
+        // Rete TPL layers (3+ and 5+ lines overlap)
+        var tplBandColors = {
+            '3-4':  '#fdd835',
+            '5-6':  '#ff9800',
+            '7-9':  '#f44336',
+            '10-14':'#9c27b0',
+            '15+':  '#1a237e'
+        };
+        var layerTPL3 = null;
+        var tpl3Loaded = false;
+        function ensureTPL3Layer() {
+            if (tpl3Loaded) return;
+            tpl3Loaded = true;
+            if (typeof dataReteTPL3 !== 'undefined') {
+                layerTPL3 = L.geoJSON(dataReteTPL3, {
+                    style: function(feature) {
+                        var band = feature.properties.fascia;
+                        return { color: tplBandColors[band] || '#ff9800', weight: 3.5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        layer.bindPopup('<strong>Rete TPL</strong><br>Fascia: ' + feature.properties.fascia + ' linee bus');
+                    }
+                });
+            }
+        }
+        var layerTPL5 = null;
+        var tpl5Loaded = false;
+        function ensureTPL5Layer() {
+            if (tpl5Loaded) return;
+            tpl5Loaded = true;
+            if (typeof dataReteTPL5 !== 'undefined') {
+                layerTPL5 = L.geoJSON(dataReteTPL5, {
+                    style: function(feature) {
+                        var band = feature.properties.fascia;
+                        return { color: tplBandColors[band] || '#ff9800', weight: 3.5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' };
+                    },
+                    onEachFeature: function(feature, layer) {
+                        layer.bindPopup('<strong>Rete TPL</strong><br>Fascia: ' + feature.properties.fascia + ' linee bus');
                     }
                 });
             }
@@ -3693,6 +3763,36 @@
             }
         });
 
+        document.getElementById('toggle-tpl3').addEventListener('change', function() {
+            if (this.checked) {
+                ensureTPL3Layer();
+                if (layerTPL3) {
+                    map.addLayer(layerTPL3);
+                    if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                    bringProposteFront();
+                }
+                document.getElementById('legend-tpl3').style.display = '';
+            } else {
+                if (layerTPL3) map.removeLayer(layerTPL3);
+                document.getElementById('legend-tpl3').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-tpl5').addEventListener('change', function() {
+            if (this.checked) {
+                ensureTPL5Layer();
+                if (layerTPL5) {
+                    map.addLayer(layerTPL5);
+                    if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                    bringProposteFront();
+                }
+                document.getElementById('legend-tpl5').style.display = '';
+            } else {
+                if (layerTPL5) map.removeLayer(layerTPL5);
+                document.getElementById('legend-tpl5').style.display = 'none';
+            }
+        });
+
         document.getElementById('toggle-proposte-elim').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(manualElimGroup);
@@ -4039,6 +4139,10 @@
                     return makeGeoJSON('Flussi_Elevati_Tab2', (json_FlussiTomTomflussi_tomtom_2 || {}).features || []);
                 case 'linee-atac':
                     return makeGeoJSON('Linee_ATAC', (typeof json_LineeATAC_4 !== 'undefined' ? json_LineeATAC_4 : {}).features || []);
+                case 'rete-tpl-3':
+                    return makeGeoJSON('Rete_TPL_3plus', (typeof dataReteTPL3 !== 'undefined' ? dataReteTPL3 : {}).features || []);
+                case 'rete-tpl-5':
+                    return makeGeoJSON('Rete_TPL_5plus', (typeof dataReteTPL5 !== 'undefined' ? dataReteTPL5 : {}).features || []);
                 case 'proposte':
                     var proposte = loadProposte();
                     var pFeatures = proposte.map(function(p) {
@@ -4086,7 +4190,7 @@
             // Load JSZip if not already loaded
             function doZipExport() {
                 var zip = new JSZip();
-                var allKeys = ['municipi', 'annesso-d', 'grafo-2026', 'strade-prov', 'extraurbane', 'flussi-bassi', 'flussi-elevati', 'linee-atac', 'proposte'];
+                var allKeys = ['municipi', 'annesso-d', 'grafo-2026', 'strade-prov', 'extraurbane', 'flussi-bassi', 'flussi-elevati', 'linee-atac', 'rete-tpl-3', 'rete-tpl-5', 'proposte'];
                 var count = 0;
                 allKeys.forEach(function(key) {
                     var geojson = getLayerGeoJSON(key);
