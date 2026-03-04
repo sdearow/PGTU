@@ -758,6 +758,29 @@
                 <div class="legend-block" id="legend-extraurbane" style="display:none;">
                     <div class="legend-item"><span class="legend-line" style="background:#8B4513"></span> Strade Extraurbane (EX)</div>
                 </div>
+                <div class="layer-toggle" style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
+                    <input type="checkbox" id="toggle-grafo2026">
+                    <label for="toggle-grafo2026" style="font-weight:700;">PGTU - Grafo 2026</label>
+                </div>
+                <div class="legend-block" id="legend-grafo2026" style="display:none;">
+                    <div class="legend-item"><span class="legend-line" style="background:#000"></span> Autostrade (A)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#007bff"></span> Scorrimento (S)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#27f1ff"></span> Interquartiere (IQ)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#ff9400"></span> Quartiere (Q)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#e4ff00"></span> Interzonali (IZ)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#8B4513"></span> Extraurbana (EX)</div>
+                    <div style="margin-top:6px;font-size:11px;color:#666;">
+                        <em>Clicca un arco per modificare/eliminare. Usa "Disegna" per aggiungere nuovi archi.</em>
+                    </div>
+                    <div style="margin-top:4px;">
+                        <button id="btn-grafo-draw" class="edit-btn edit-btn-ins" style="font-size:11px;padding:4px 10px;margin:2px;">&#9998; Disegna Arco</button>
+                        <button id="btn-grafo-export" class="edit-action-btn" style="font-size:11px;padding:4px 10px;margin:2px;background:#27ae60;color:white;">Esporta GeoJSON</button>
+                        <button id="btn-grafo-reset" class="edit-action-btn" style="font-size:11px;padding:4px 10px;margin:2px;background:#e74c3c;color:white;">Reset</button>
+                    </div>
+                    <div id="grafo-draw-instructions" style="display:none;font-size:11px;color:#006400;margin-top:4px;">
+                        Clicca sulla mappa per aggiungere vertici. Doppio-clic per terminare.
+                    </div>
+                </div>
             </div>
 
             <div class="control-section">
@@ -3667,6 +3690,293 @@
                 map.removeLayer(manualInsGroup);
                 document.getElementById('legend-proposte-ins').style.display = 'none';
             }
+        });
+
+        // =====================================================
+        // PGTU - GRAFO 2026 (editable layer)
+        // =====================================================
+        var GRAFO_KEY = 'pgtu_grafo_2026';
+        var layerGrafo2026 = L.layerGroup();
+        var grafo2026Active = false;
+        var grafo2026DrawMode = false;
+        var grafo2026DrawPoints = [];
+        var grafo2026DrawMarkers = [];
+        var grafo2026DrawLines = [];
+        var grafo2026PreviewLine = null;
+
+        function loadGrafo() {
+            try {
+                var data = localStorage.getItem(GRAFO_KEY);
+                return data ? JSON.parse(data) : null;
+            } catch(e) { return null; }
+        }
+
+        function saveGrafo(features) {
+            try {
+                localStorage.setItem(GRAFO_KEY, JSON.stringify(features));
+            } catch(e) { console.warn('Grafo save error:', e); }
+        }
+
+        function buildInitialGrafo() {
+            var features = [];
+            // 1) Add all Annesso D features
+            if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
+                var annesso = json_PGTUAnnessoD_5.features || [];
+                annesso.forEach(function(f, idx) {
+                    features.push({
+                        id: 'ad_' + idx,
+                        name: f.properties.Toponomast || f.properties.Nome || '',
+                        classifica: f.properties.Classifica || '',
+                        limiti: f.properties.Limiti || '',
+                        municipio: f.properties.Municipio || '',
+                        cod_prog: f.properties.Cod_prog || '',
+                        grande_via: f.properties.Grande_Via || '',
+                        tpl: f.properties.TPL || '',
+                        note: f.properties.Note_2025 || '',
+                        source: 'Annesso D',
+                        geometry: f.geometry
+                    });
+                });
+            }
+            // 2) Process proposte
+            var proposte = loadProposte();
+            var elimGeometries = [];
+            proposte.forEach(function(p) {
+                if (p.type === 'eliminazione' && p.geometry) {
+                    elimGeometries.push(JSON.stringify(p.geometry));
+                }
+                if (p.type === 'inserimento' && p.geometry && p.geometry.type !== 'Point') {
+                    features.push({
+                        id: 'ins_' + p.id,
+                        name: p.name || '',
+                        classifica: p.classificazione || '',
+                        limiti: '',
+                        municipio: p.municipio || '',
+                        cod_prog: '',
+                        grande_via: '',
+                        tpl: '',
+                        note: p.notes || '',
+                        source: 'Proposta Inserimento',
+                        geometry: p.geometry
+                    });
+                }
+            });
+            // Remove eliminated features by geometry match
+            if (elimGeometries.length > 0) {
+                features = features.filter(function(f) {
+                    var geomStr = JSON.stringify(f.geometry);
+                    return elimGeometries.indexOf(geomStr) === -1;
+                });
+            }
+            return features;
+        }
+
+        function renderGrafo2026() {
+            layerGrafo2026.clearLayers();
+            var features = loadGrafo();
+            if (!features) {
+                features = buildInitialGrafo();
+                saveGrafo(features);
+            }
+            features.forEach(function(f) {
+                if (!f.geometry) return;
+                var color = classificaColors[f.classifica] || '#888888';
+                var geoLayer = L.geoJSON(f.geometry, {
+                    style: function() {
+                        return {
+                            color: color,
+                            weight: 3,
+                            opacity: 1,
+                            lineCap: 'square',
+                            lineJoin: 'bevel'
+                        };
+                    }
+                });
+                geoLayer.eachLayer(function(layer) {
+                    var cfName = classificaNames[f.classifica] || f.classifica || 'N/D';
+                    var html = '<div class="popup-title">' + (f.name || 'Arco senza nome') + '</div>';
+                    html += '<span class="popup-layer-badge" style="background:#2c3e50;">Grafo 2026</span>';
+                    html += '<table class="popup-table">';
+                    html += popupRow('Classificazione', cfName + (f.classifica ? ' (' + f.classifica + ')' : ''));
+                    html += popupRow('Limiti', fmt(f.limiti));
+                    html += popupRow('Municipio', fmt(f.municipio));
+                    html += popupRow('Fonte', f.source);
+                    if (f.note && f.note !== '-') html += popupRow('Note', f.note);
+                    html += '</table>';
+                    html += '<div style="margin-top:8px">';
+                    html += '<button class="popup-btn popup-btn-edit" onclick="window._grafoChangeClass(\'' + f.id + '\')">Cambia Classe</button>';
+                    html += '<button class="popup-btn popup-btn-delete" onclick="window._grafoDeleteLink(\'' + f.id + '\')">Elimina Arco</button>';
+                    html += '</div>';
+                    layer.bindPopup(html, { maxWidth: 340 });
+                });
+                layerGrafo2026.addLayer(geoLayer);
+            });
+        }
+
+        // Global functions for Grafo 2026 popup actions
+        window._grafoDeleteLink = function(id) {
+            if (!confirm('Eliminare questo arco dal Grafo 2026?')) return;
+            var features = loadGrafo() || [];
+            features = features.filter(function(f) { return f.id !== id; });
+            saveGrafo(features);
+            map.closePopup();
+            renderGrafo2026();
+        };
+
+        window._grafoChangeClass = function(id) {
+            var features = loadGrafo() || [];
+            var feature = null;
+            for (var i = 0; i < features.length; i++) {
+                if (features[i].id === id) { feature = features[i]; break; }
+            }
+            if (!feature) return;
+            map.closePopup();
+            showNotesModal('inserimento', feature.name || 'Arco', function(result) {
+                if (result.classificazione !== undefined) feature.classifica = result.classificazione;
+                if (result.streetName) feature.name = result.streetName;
+                feature.note = result.notes || feature.note;
+                saveGrafo(features);
+                renderGrafo2026();
+            }, feature.note || '', true, true, feature.classifica || '');
+        };
+
+        // Grafo 2026 draw mode
+        function toggleGrafo2026Draw() {
+            grafo2026DrawMode = !grafo2026DrawMode;
+            var btn = document.getElementById('btn-grafo-draw');
+            var instr = document.getElementById('grafo-draw-instructions');
+            if (grafo2026DrawMode) {
+                btn.style.background = '#006400';
+                btn.style.color = 'white';
+                instr.style.display = '';
+                map.getContainer().style.cursor = 'crosshair';
+            } else {
+                btn.style.background = '';
+                btn.style.color = '';
+                instr.style.display = 'none';
+                map.getContainer().style.cursor = '';
+                cancelGrafo2026Draw();
+            }
+        }
+
+        function cancelGrafo2026Draw() {
+            grafo2026DrawPoints = [];
+            grafo2026DrawMarkers.forEach(function(m) { map.removeLayer(m); });
+            grafo2026DrawMarkers = [];
+            grafo2026DrawLines.forEach(function(l) { map.removeLayer(l); });
+            grafo2026DrawLines = [];
+            if (grafo2026PreviewLine) { map.removeLayer(grafo2026PreviewLine); grafo2026PreviewLine = null; }
+        }
+
+        map.on('click', function(e) {
+            if (!grafo2026DrawMode || !grafo2026Active) return;
+            var latlng = e.latlng;
+            grafo2026DrawPoints.push([latlng.lng, latlng.lat]);
+            var marker = L.circleMarker(latlng, { radius: 4, color: '#006400', fillColor: '#006400', fillOpacity: 1 });
+            marker.addTo(map);
+            grafo2026DrawMarkers.push(marker);
+            if (grafo2026DrawPoints.length > 1) {
+                var prev = grafo2026DrawPoints[grafo2026DrawPoints.length - 2];
+                var line = L.polyline([[prev[1], prev[0]], [latlng.lat, latlng.lng]], { color: '#006400', weight: 3, dashArray: '6,4' });
+                line.addTo(map);
+                grafo2026DrawLines.push(line);
+            }
+        });
+
+        map.on('mousemove', function(e) {
+            if (!grafo2026DrawMode || !grafo2026Active || grafo2026DrawPoints.length === 0) return;
+            var last = grafo2026DrawPoints[grafo2026DrawPoints.length - 1];
+            if (grafo2026PreviewLine) map.removeLayer(grafo2026PreviewLine);
+            grafo2026PreviewLine = L.polyline([[last[1], last[0]], [e.latlng.lat, e.latlng.lng]], { color: '#006400', weight: 2, dashArray: '4,4', opacity: 0.5 });
+            grafo2026PreviewLine.addTo(map);
+        });
+
+        map.on('dblclick', function(e) {
+            if (!grafo2026DrawMode || !grafo2026Active || grafo2026DrawPoints.length < 2) return;
+            L.DomEvent.stopPropagation(e);
+            L.DomEvent.preventDefault(e);
+            var coords = grafo2026DrawPoints.slice();
+            cancelGrafo2026Draw();
+
+            showNotesModal('inserimento', '', function(result) {
+                var newFeature = {
+                    id: 'g26_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 4),
+                    name: result.streetName || 'Nuovo arco',
+                    classifica: result.classificazione || '',
+                    limiti: '',
+                    municipio: '',
+                    cod_prog: '',
+                    grande_via: '',
+                    tpl: '',
+                    note: result.notes || '',
+                    source: 'Disegno Grafo 2026',
+                    geometry: { type: 'LineString', coordinates: coords }
+                };
+                var features = loadGrafo() || [];
+                features.push(newFeature);
+                saveGrafo(features);
+                renderGrafo2026();
+            }, '', true, true, '');
+        });
+
+        // Toggle event
+        document.getElementById('toggle-grafo2026').addEventListener('change', function() {
+            if (this.checked) {
+                grafo2026Active = true;
+                renderGrafo2026();
+                map.addLayer(layerGrafo2026);
+                layerGrafo2026.bringToFront();
+                document.getElementById('legend-grafo2026').style.display = '';
+            } else {
+                grafo2026Active = false;
+                map.removeLayer(layerGrafo2026);
+                document.getElementById('legend-grafo2026').style.display = 'none';
+                if (grafo2026DrawMode) toggleGrafo2026Draw();
+            }
+        });
+
+        // Draw button
+        document.getElementById('btn-grafo-draw').addEventListener('click', function() {
+            toggleGrafo2026Draw();
+        });
+
+        // Export button
+        document.getElementById('btn-grafo-export').addEventListener('click', function() {
+            var features = loadGrafo() || [];
+            var geojson = {
+                type: 'FeatureCollection',
+                features: features.map(function(f) {
+                    return {
+                        type: 'Feature',
+                        properties: {
+                            nome: f.name,
+                            classifica: f.classifica,
+                            limiti: f.limiti,
+                            municipio: f.municipio,
+                            cod_prog: f.cod_prog,
+                            grande_viabilita: f.grande_via,
+                            tpl: f.tpl,
+                            note: f.note,
+                            fonte: f.source
+                        },
+                        geometry: f.geometry
+                    };
+                })
+            };
+            var blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'PGTU_Grafo_2026.geojson';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Reset button
+        document.getElementById('btn-grafo-reset').addEventListener('click', function() {
+            if (!confirm('Resettare il Grafo 2026? Tutti gli archi eliminati e aggiunti manualmente verranno ripristinati allo stato iniziale (Annesso D + Proposte).')) return;
+            localStorage.removeItem(GRAFO_KEY);
+            renderGrafo2026();
         });
 
         // =====================================================
