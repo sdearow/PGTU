@@ -734,6 +734,13 @@
             <div class="control-section">
                 <h3>Rete Stradale Principale</h3>
                 <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-pgtu-black">
+                    <label for="toggle-pgtu-black">PGTU - Annesso D (Nero)</label>
+                </div>
+                <div class="legend-block" id="legend-pgtu-black" style="display:none;">
+                    <div class="legend-item"><span class="legend-line" style="background:#000"></span> Tutti gli archi (nero)</div>
+                </div>
+                <div class="layer-toggle">
                     <input type="checkbox" id="toggle-pgtu" checked>
                     <label for="toggle-pgtu">PGTU - Annesso D</label>
                 </div>
@@ -997,8 +1004,7 @@
     <!-- Strade Extraurbane -->
     <script src="data_extraurbane.js"></script>
 
-    <!-- Disconnessioni Grafo -->
-    <script src="data_disconnessioni.js"></script>
+    <!-- Disconnessioni Grafo (now computed dynamically in-browser) -->
 
     <!-- Rete TPL -->
     <script src="data_rete_tpl_3.js"></script>
@@ -1282,6 +1288,14 @@
             style: stylePGTU,
             onEachFeature: popupPGTU
         }).addTo(map);
+
+        // Black PGTU layer (all links in black, off by default)
+        var layerPGTUBlack = L.geoJSON(json_PGTUAnnessoD_5, {
+            style: function() {
+                return { color: '#000000', weight: 2.5, opacity: 1, lineCap: 'square', lineJoin: 'bevel' };
+            },
+            onEachFeature: popupPGTU
+        });
 
         // ATAC bus/tram lines layer (off by default, loaded on demand)
         var layerATAC = null;
@@ -3689,6 +3703,19 @@
             manualInsGroup.bringToFront();
         }
 
+        document.getElementById('toggle-pgtu-black').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(layerPGTUBlack);
+                // Black layer goes behind the colored PGTU layer
+                if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                bringProposteFront();
+                document.getElementById('legend-pgtu-black').style.display = '';
+            } else {
+                map.removeLayer(layerPGTUBlack);
+                document.getElementById('legend-pgtu-black').style.display = 'none';
+            }
+        });
+
         document.getElementById('toggle-pgtu').addEventListener('change', function() {
             if (this.checked) {
                 map.addLayer(layerPGTU);
@@ -4109,35 +4136,126 @@
         });
 
         // =====================================================
-        // DISCONNESSIONI GRAFO layer
+        // DISCONNESSIONI GRAFO layer (dynamic endpoint detection)
+        // Each endpoint of each link is checked independently.
+        // An endpoint is "disconnected" if no other link has an
+        // endpoint within a small tolerance (snap distance).
         // =====================================================
         var layerDisconnessioni = L.layerGroup();
-        (function() {
-            if (typeof dataDisconnessioni === 'undefined') return;
-            var count = dataDisconnessioni.length;
-            document.getElementById('disconnessioni-count').textContent = '(' + count + ' punti)';
-            dataDisconnessioni.forEach(function(pt) {
-                var marker = L.circleMarker([pt.lat, pt.lng], {
+        var disconnessioniComputed = false;
+
+        function computeDisconnessioni() {
+            if (disconnessioniComputed) return;
+            disconnessioniComputed = true;
+            layerDisconnessioni.clearLayers();
+
+            // Collect all link endpoints from PGTU Annesso D
+            var features = [];
+            if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
+                features = json_PGTUAnnessoD_5.features || [];
+            }
+            if (features.length === 0) return;
+
+            // Extract endpoints: for each link, get first and last coordinate
+            // Each endpoint stores: {lng, lat, featureIdx, which: 'start'|'end'}
+            var endpoints = [];
+            features.forEach(function(f, idx) {
+                if (!f.geometry) return;
+                var coords = f.geometry.coordinates;
+                var geomType = f.geometry.type;
+                var lines = [];
+                if (geomType === 'LineString') {
+                    lines.push(coords);
+                } else if (geomType === 'MultiLineString') {
+                    lines = coords;
+                }
+                lines.forEach(function(line) {
+                    if (!line || line.length < 2) return;
+                    var first = line[0];
+                    var last = line[line.length - 1];
+                    endpoints.push({
+                        lng: first[0], lat: first[1],
+                        featureIdx: idx, which: 'start',
+                        name: f.properties.Toponomast || f.properties.Nome || ''
+                    });
+                    endpoints.push({
+                        lng: last[0], lat: last[1],
+                        featureIdx: idx, which: 'end',
+                        name: f.properties.Toponomast || f.properties.Nome || ''
+                    });
+                });
+            });
+
+            // Snap tolerance in degrees (~15 meters at Rome's latitude)
+            var SNAP = 0.00015;
+
+            // Build a grid-based spatial index for fast neighbor lookup
+            var cellSize = SNAP * 2;
+            var grid = {};
+            function cellKey(lng, lat) {
+                return Math.floor(lng / cellSize) + ',' + Math.floor(lat / cellSize);
+            }
+            endpoints.forEach(function(ep, i) {
+                var key = cellKey(ep.lng, ep.lat);
+                if (!grid[key]) grid[key] = [];
+                grid[key].push(i);
+            });
+
+            // For each endpoint, check if any OTHER link's endpoint is within SNAP
+            var disconnectedPoints = [];
+            endpoints.forEach(function(ep, i) {
+                var cx = Math.floor(ep.lng / cellSize);
+                var cy = Math.floor(ep.lat / cellSize);
+                var found = false;
+                // Check 3x3 neighborhood
+                for (var dx = -1; dx <= 1 && !found; dx++) {
+                    for (var dy = -1; dy <= 1 && !found; dy++) {
+                        var key = (cx + dx) + ',' + (cy + dy);
+                        var bucket = grid[key];
+                        if (!bucket) continue;
+                        for (var j = 0; j < bucket.length; j++) {
+                            var other = endpoints[bucket[j]];
+                            // Must be a different feature (different link)
+                            if (other.featureIdx === ep.featureIdx) continue;
+                            var dlng = Math.abs(ep.lng - other.lng);
+                            var dlat = Math.abs(ep.lat - other.lat);
+                            if (dlng <= SNAP && dlat <= SNAP) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!found) {
+                    disconnectedPoints.push(ep);
+                }
+            });
+
+            document.getElementById('disconnessioni-count').textContent = '(' + disconnectedPoints.length + ' punti)';
+
+            disconnectedPoints.forEach(function(ep) {
+                var marker = L.circleMarker([ep.lat, ep.lng], {
                     radius: 5,
                     color: '#c0392b',
                     fillColor: '#e74c3c',
                     fillOpacity: 0.9,
                     weight: 2
                 });
-                var html = '<div class="popup-title">Disconnessione #' + pt.comp + '</div>';
+                var html = '<div class="popup-title">Endpoint disconnesso</div>';
                 html += '<span class="popup-layer-badge" style="background:#c0392b;">Gap rete</span>';
                 html += '<table class="popup-table">';
-                html += popupRow('Componente', '#' + pt.comp + ' (' + pt.archi + ' archi)');
-                html += popupRow('Municipio', pt.municipio);
-                html += popupRow('Strade', pt.strade);
+                html += popupRow('Strada', ep.name || '(senza nome)');
+                html += popupRow('Estremo', ep.which === 'start' ? 'Inizio arco' : 'Fine arco');
+                html += popupRow('Coordinate', ep.lat.toFixed(6) + ', ' + ep.lng.toFixed(6));
                 html += '</table>';
                 marker.bindPopup(html, { maxWidth: 300 });
                 layerDisconnessioni.addLayer(marker);
             });
-        })();
+        }
 
         document.getElementById('toggle-disconnessioni').addEventListener('change', function() {
             if (this.checked) {
+                computeDisconnessioni();
                 map.addLayer(layerDisconnessioni);
                 layerDisconnessioni.bringToFront();
             } else {
