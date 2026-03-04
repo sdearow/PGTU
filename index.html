@@ -1493,6 +1493,11 @@
             });
 
             updateProposteCounter();
+
+            // Sync: rebuild Grafo 2026 when proposte change
+            if (typeof rebuildGrafo2026 === 'function' && grafo2026Active) {
+                rebuildGrafo2026();
+            }
         }
 
         function updateProposteCounter() {
@@ -1556,9 +1561,9 @@
         });
 
         // opts: { notes, showName, showClass, existingClass }
-        function showNotesModal(type, roadName, callback, existingNotes, showNameInput, showClassInput, existingClass) {
+        function showNotesModal(type, roadName, callback, existingNotes, showNameInput, showClassInput, existingClass, modalTitle) {
             var isElim = type === 'eliminazione';
-            document.getElementById('modal-title').textContent = existingNotes !== undefined && existingNotes !== '' ? 'Modifica Proposta' : 'Aggiungi Proposta';
+            document.getElementById('modal-title').textContent = modalTitle || (existingNotes !== undefined && existingNotes !== '' ? 'Modifica Proposta' : 'Aggiungi Proposta');
             document.getElementById('modal-road-name').style.display = 'none';
             var badge = document.getElementById('modal-type-badge');
             badge.textContent = isElim ? 'Eliminazione' : 'Inserimento';
@@ -3826,18 +3831,25 @@
         var grafo2026DrawMarkers = [];
         var grafo2026DrawLines = [];
         var grafo2026PreviewLine = null;
+        var grafo2026Features = null; // in-memory store (authoritative)
 
         function loadGrafo() {
+            if (grafo2026Features) return grafo2026Features;
             try {
                 var data = localStorage.getItem(GRAFO_KEY);
-                return data ? JSON.parse(data) : null;
-            } catch(e) { return null; }
+                if (data) {
+                    grafo2026Features = JSON.parse(data);
+                    return grafo2026Features;
+                }
+            } catch(e) {}
+            return null;
         }
 
         function saveGrafo(features) {
+            grafo2026Features = features;
             try {
                 localStorage.setItem(GRAFO_KEY, JSON.stringify(features));
-            } catch(e) { console.warn('Grafo save error:', e); }
+            } catch(e) { console.warn('Grafo save error (localStorage quota?):', e); }
         }
 
         function buildInitialGrafo() {
@@ -3892,6 +3904,35 @@
                 });
             }
             return features;
+        }
+
+        // Rebuild Grafo 2026 from scratch (Annesso D + current proposte)
+        // Preserves user-drawn features and manual edits (Cambia Classe)
+        function rebuildGrafo2026() {
+            var oldFeatures = loadGrafo() || [];
+            // Save user-drawn features
+            var userDrawn = oldFeatures.filter(function(f) { return f.source === 'Disegno Grafo 2026'; });
+            // Save manual edits to Annesso D features (keyed by id)
+            var manualEdits = {};
+            oldFeatures.forEach(function(f) {
+                if (f.source === 'Annesso D' && f._edited) {
+                    manualEdits[f.id] = { classifica: f.classifica, name: f.name, note: f.note };
+                }
+            });
+            var features = buildInitialGrafo();
+            // Re-apply manual edits
+            features.forEach(function(f) {
+                if (manualEdits[f.id]) {
+                    f.classifica = manualEdits[f.id].classifica;
+                    f.name = manualEdits[f.id].name;
+                    f.note = manualEdits[f.id].note;
+                    f._edited = true;
+                }
+            });
+            // Re-add user-drawn features
+            userDrawn.forEach(function(f) { features.push(f); });
+            saveGrafo(features);
+            if (grafo2026Active) renderGrafo2026();
         }
 
         function renderGrafo2026() {
@@ -3958,9 +3999,10 @@
                 if (result.classificazione !== undefined) feature.classifica = result.classificazione;
                 if (result.streetName) feature.name = result.streetName;
                 feature.note = result.notes || feature.note;
+                feature._edited = true;
                 saveGrafo(features);
                 renderGrafo2026();
-            }, feature.note || '', true, true, feature.classifica || '');
+            }, feature.note || '', true, true, feature.classifica || '', 'Modifica Arco - Grafo 2026');
         };
 
         // Grafo 2026 draw mode
