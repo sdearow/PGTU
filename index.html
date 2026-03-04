@@ -743,6 +743,7 @@
                     <div class="legend-item"><span class="legend-line" style="background:#27f1ff"></span> Interquartiere (IQ)</div>
                     <div class="legend-item"><span class="legend-line" style="background:#ff9400"></span> Quartiere (Q)</div>
                     <div class="legend-item"><span class="legend-line" style="background:#e4ff00"></span> Interzonali (IZ)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#8B4513"></span> Extraurbana (EX)</div>
                 </div>
                 <div class="layer-toggle">
                     <input type="checkbox" id="toggle-strade-prov">
@@ -913,6 +914,7 @@
                     <option value="IQ">&#9632; Interquartiere (IQ)</option>
                     <option value="Q">&#9632; Quartiere (Q)</option>
                     <option value="IZ">&#9632; Interzonali (IZ)</option>
+                    <option value="EX">&#9632; Extraurbana (EX)</option>
                 </select>
             </div>
             <div style="margin-top:8px">
@@ -987,11 +989,12 @@
             'S':  '#007bff',
             'IQ': '#27f1ff',
             'Q':  '#ff9400',
-            'IZ': '#e4ff00'
+            'IZ': '#e4ff00',
+            'EX': '#8B4513'
         };
         var classificaNames = {
             'A': 'Autostrade', 'S': 'Scorrimento', 'IQ': 'Interquartiere',
-            'Q': 'Quartiere', 'IZ': 'Interzonali'
+            'Q': 'Quartiere', 'IZ': 'Interzonali', 'EX': 'Extraurbana'
         };
 
         function stylePGTU(feature) {
@@ -1456,7 +1459,7 @@
         var modalShowClassField = false;
 
         // Color the select options
-        var classOptColors = { 'A': '#000000', 'S': '#007bff', 'IQ': '#27f1ff', 'Q': '#ff9400', 'IZ': '#e4ff00' };
+        var classOptColors = { 'A': '#000000', 'S': '#007bff', 'IQ': '#27f1ff', 'Q': '#ff9400', 'IZ': '#e4ff00', 'EX': '#8B4513' };
         modalClassSelect.addEventListener('change', function() {
             var c = classOptColors[this.value];
             this.style.borderLeft = c ? '4px solid ' + c : '1px solid #ddd';
