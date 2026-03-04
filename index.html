@@ -1094,6 +1094,33 @@
             style: defaultMunicipiStyle
         }).addTo(map);
 
+        // Outer boundary of all Municipi merged together
+        (function() {
+            try {
+                var merged = null;
+                layerMunicipii.eachLayer(function(layer) {
+                    var geojson = layer.toGeoJSON();
+                    if (!merged) {
+                        merged = geojson;
+                    } else {
+                        merged = turf.union(turf.featureCollection([merged, geojson]));
+                    }
+                });
+                if (merged) {
+                    L.geoJSON(merged, {
+                        style: {
+                            color: '#1a1a1a',
+                            weight: 4,
+                            opacity: 0.9,
+                            fillOpacity: 0,
+                            dashArray: null
+                        },
+                        interactive: false
+                    }).addTo(map);
+                }
+            } catch(e) { console.warn('Outer Municipi border:', e); }
+        })();
+
         // Strade Provinciali layer (off by default, behind all other layers)
         var layerStradeProvinciali = null;
         var stradeProvLoaded = false;
