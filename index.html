@@ -782,6 +782,11 @@
                         Clicca sulla mappa per aggiungere vertici. Doppio-clic per terminare.
                     </div>
                 </div>
+                <div class="layer-toggle" style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
+                    <input type="checkbox" id="toggle-disconnessioni">
+                    <label for="toggle-disconnessioni" style="font-weight:600;color:#c0392b;">&#9679; Disconnessioni Grafo</label>
+                    <span id="disconnessioni-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
+                </div>
             </div>
 
             <div class="control-section">
@@ -991,6 +996,9 @@
 
     <!-- Strade Extraurbane -->
     <script src="data_extraurbane.js"></script>
+
+    <!-- Disconnessioni Grafo -->
+    <script src="data_disconnessioni.js"></script>
 
     <!-- Rete TPL -->
     <script src="data_rete_tpl_3.js"></script>
@@ -4097,6 +4105,43 @@
                 map.removeLayer(layerGrafo2026);
                 document.getElementById('legend-grafo2026').style.display = 'none';
                 if (grafo2026DrawMode) toggleGrafo2026Draw();
+            }
+        });
+
+        // =====================================================
+        // DISCONNESSIONI GRAFO layer
+        // =====================================================
+        var layerDisconnessioni = L.layerGroup();
+        (function() {
+            if (typeof dataDisconnessioni === 'undefined') return;
+            var count = dataDisconnessioni.length;
+            document.getElementById('disconnessioni-count').textContent = '(' + count + ' punti)';
+            dataDisconnessioni.forEach(function(pt) {
+                var marker = L.circleMarker([pt.lat, pt.lng], {
+                    radius: 5,
+                    color: '#c0392b',
+                    fillColor: '#e74c3c',
+                    fillOpacity: 0.9,
+                    weight: 2
+                });
+                var html = '<div class="popup-title">Disconnessione #' + pt.comp + '</div>';
+                html += '<span class="popup-layer-badge" style="background:#c0392b;">Gap rete</span>';
+                html += '<table class="popup-table">';
+                html += popupRow('Componente', '#' + pt.comp + ' (' + pt.archi + ' archi)');
+                html += popupRow('Municipio', pt.municipio);
+                html += popupRow('Strade', pt.strade);
+                html += '</table>';
+                marker.bindPopup(html, { maxWidth: 300 });
+                layerDisconnessioni.addLayer(marker);
+            });
+        })();
+
+        document.getElementById('toggle-disconnessioni').addEventListener('change', function() {
+            if (this.checked) {
+                map.addLayer(layerDisconnessioni);
+                layerDisconnessioni.bringToFront();
+            } else {
+                map.removeLayer(layerDisconnessioni);
             }
         });
 
