@@ -793,6 +793,7 @@
                     <input type="checkbox" id="toggle-disconnessioni">
                     <label for="toggle-disconnessioni" style="font-weight:600;color:#c0392b;">&#9679; Disconnessioni Grafo</label>
                     <span id="disconnessioni-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
+                    <button id="btn-reset-disc" onclick="resolvedDisconnessioni=[];localStorage.removeItem('pgtu_resolved_disc');disconnessioniComputed=false;layerDisconnessioni.clearLayers();if(document.getElementById('toggle-disconnessioni').checked){computeDisconnessioni();}" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
                 </div>
             </div>
 
@@ -4143,6 +4144,16 @@
         // =====================================================
         var layerDisconnessioni = L.layerGroup();
         var disconnessioniComputed = false;
+        var resolvedDisconnessioni = JSON.parse(localStorage.getItem('pgtu_resolved_disc') || '[]');
+
+        function discKey(ep) {
+            return ep.lng.toFixed(6) + '|' + ep.lat.toFixed(6) + '|' + ep.featureIdx + '|' + ep.which;
+        }
+
+        function updateDiscCount() {
+            var count = layerDisconnessioni.getLayers().length;
+            document.getElementById('disconnessioni-count').textContent = '(' + count + ' punti)';
+        }
 
         function computeDisconnessioni() {
             if (disconnessioniComputed) return;
@@ -4186,8 +4197,8 @@
                 });
             });
 
-            // Snap tolerance in degrees (~15 meters at Rome's latitude)
-            var SNAP = 0.00015;
+            // Snap tolerance in degrees (~25 meters at Rome's latitude)
+            var SNAP = 0.000225;
 
             // Build a grid-based spatial index for fast neighbor lookup
             var cellSize = SNAP * 2;
@@ -4231,9 +4242,10 @@
                 }
             });
 
-            document.getElementById('disconnessioni-count').textContent = '(' + disconnectedPoints.length + ' punti)';
-
             disconnectedPoints.forEach(function(ep) {
+                var key = discKey(ep);
+                if (resolvedDisconnessioni.indexOf(key) !== -1) return;
+
                 var marker = L.circleMarker([ep.lat, ep.lng], {
                     radius: 5,
                     color: '#c0392b',
@@ -4241,6 +4253,7 @@
                     fillOpacity: 0.9,
                     weight: 2
                 });
+                var markerId = L.stamp(marker);
                 var html = '<div class="popup-title">Endpoint disconnesso</div>';
                 html += '<span class="popup-layer-badge" style="background:#c0392b;">Gap rete</span>';
                 html += '<table class="popup-table">';
@@ -4248,9 +4261,23 @@
                 html += popupRow('Estremo', ep.which === 'start' ? 'Inizio arco' : 'Fine arco');
                 html += popupRow('Coordinate', ep.lat.toFixed(6) + ', ' + ep.lng.toFixed(6));
                 html += '</table>';
+                html += '<button onclick="resolveDisconnessione(\'' + key.replace(/'/g, "\\'") + '\',' + markerId + ')" style="margin-top:8px;padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Risolto &#10003;</button>';
                 marker.bindPopup(html, { maxWidth: 300 });
                 layerDisconnessioni.addLayer(marker);
             });
+
+            updateDiscCount();
+        }
+
+        function resolveDisconnessione(key, markerId) {
+            resolvedDisconnessioni.push(key);
+            localStorage.setItem('pgtu_resolved_disc', JSON.stringify(resolvedDisconnessioni));
+            layerDisconnessioni.eachLayer(function(layer) {
+                if (L.stamp(layer) === markerId) {
+                    layerDisconnessioni.removeLayer(layer);
+                }
+            });
+            updateDiscCount();
         }
 
         document.getElementById('toggle-disconnessioni').addEventListener('change', function() {
