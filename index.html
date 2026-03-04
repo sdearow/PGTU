@@ -793,7 +793,7 @@
                     <input type="checkbox" id="toggle-disconnessioni">
                     <label for="toggle-disconnessioni" style="font-weight:600;color:#c0392b;">&#9679; Disconnessioni Grafo</label>
                     <span id="disconnessioni-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
-                    <button id="btn-reset-disc" onclick="resolvedDisconnessioni=[];localStorage.removeItem('pgtu_resolved_disc');disconnessioniComputed=false;layerDisconnessioni.clearLayers();if(document.getElementById('toggle-disconnessioni').checked){computeDisconnessioni();}" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
+                    <button id="btn-reset-disc" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
                 </div>
             </div>
 
@@ -4443,7 +4443,7 @@
             updateDiscCount();
         }
 
-        function resolveDisconnessione(key, markerId) {
+        window.resolveDisconnessione = function(key, markerId) {
             resolvedDisconnessioni.push(key);
             localStorage.setItem('pgtu_resolved_disc', JSON.stringify(resolvedDisconnessioni));
             layerDisconnessioni.eachLayer(function(layer) {
@@ -4452,7 +4452,7 @@
                 }
             });
             updateDiscCount();
-        }
+        };
 
         document.getElementById('toggle-disconnessioni').addEventListener('change', function() {
             if (this.checked) {
@@ -4461,6 +4461,16 @@
                 layerDisconnessioni.bringToFront();
             } else {
                 map.removeLayer(layerDisconnessioni);
+            }
+        });
+
+        document.getElementById('btn-reset-disc').addEventListener('click', function() {
+            resolvedDisconnessioni = [];
+            localStorage.removeItem('pgtu_resolved_disc');
+            disconnessioniComputed = false;
+            layerDisconnessioni.clearLayers();
+            if (document.getElementById('toggle-disconnessioni').checked) {
+                computeDisconnessioni();
             }
         });
 
