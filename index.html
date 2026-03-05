@@ -1551,6 +1551,11 @@
                 } else if (typeof discClassComputed !== 'undefined') {
                     discClassComputed = false;
                 }
+                // Recompute graph disconnections since they depend on Grafo 2026
+                disconnessioniComputed = false;
+                if (document.getElementById('toggle-disconnessioni').checked) {
+                    computeDisconnessioni();
+                }
             }
         }
 
@@ -4378,15 +4383,16 @@
             disconnessioniComputed = true;
             layerDisconnessioni.clearLayers();
 
-            // Collect all link endpoints from PGTU Annesso D
-            var features = [];
-            if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
-                features = json_PGTUAnnessoD_5.features || [];
-            }
-            if (features.length === 0) return;
+            // Use Grafo 2026 features (Annesso D + proposte) for PGTU graph
+            var grafoFeats = loadGrafo() || buildInitialGrafo();
+            if (grafoFeats.length === 0) return;
+
+            // Wrap grafo features into GeoJSON-like objects for segment indexing
+            var features = grafoFeats.map(function(f) {
+                return { geometry: f.geometry, properties: { Toponomast: f.name, Nome: f.name } };
+            });
 
             // Extract endpoints: for each link, get first and last coordinate
-            // Each endpoint stores: {lng, lat, featureIdx, which: 'start'|'end'}
             var endpoints = [];
             features.forEach(function(f, idx) {
                 if (!f.geometry) return;
@@ -4474,21 +4480,24 @@
             indexFeaturesSegments(extraFeats, -200000);
 
             // For each endpoint, check if any segment of a DIFFERENT link is within SNAP
+            // Check 3x3 grid neighborhood to avoid missing segments near cell boundaries
             var disconnectedPoints = [];
             endpoints.forEach(function(ep, i) {
                 var cx = Math.floor(ep.lng / cellSize);
                 var cy = Math.floor(ep.lat / cellSize);
                 var found = false;
-                var key = cx + ',' + cy;
-                var bucket = segGrid[key];
-                if (bucket) {
-                    for (var j = 0; j < bucket.length; j++) {
-                        var seg = allSegments[bucket[j]];
-                        if (seg.featureIdx === ep.featureIdx) continue;
-                        var dist = pointToSegmentDist(ep.lng, ep.lat, seg.ax, seg.ay, seg.bx, seg.by);
-                        if (dist <= SNAP) {
-                            found = true;
-                            break;
+                for (var gx = cx - 1; gx <= cx + 1 && !found; gx++) {
+                    for (var gy = cy - 1; gy <= cy + 1 && !found; gy++) {
+                        var bucket = segGrid[gx + ',' + gy];
+                        if (!bucket) continue;
+                        for (var j = 0; j < bucket.length; j++) {
+                            var seg = allSegments[bucket[j]];
+                            if (seg.featureIdx === ep.featureIdx) continue;
+                            var dist = pointToSegmentDist(ep.lng, ep.lat, seg.ax, seg.ay, seg.bx, seg.by);
+                            if (dist <= SNAP) {
+                                found = true;
+                                break;
+                            }
                         }
                     }
                 }
