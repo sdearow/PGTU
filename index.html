@@ -954,9 +954,34 @@
                     <button class="edit-action-btn btn-export-layer" data-layer="pgtu-no-tpl5" style="font-size:11px;padding:4px 8px;text-align:left;">Annesso D non in TPL 5+</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="disconnessioni" style="font-size:11px;padding:4px 8px;text-align:left;">Disconnessioni Grafo</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="disc-classificazione" style="font-size:11px;padding:4px 8px;text-align:left;">Disconnessioni Classificazione</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="centri-abitati" style="font-size:11px;padding:4px 8px;text-align:left;">Centri Abitati</button>
                 </div>
                 <div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
                     <button class="edit-action-btn" id="btn-export-all-layers" style="font-size:12px;padding:6px 10px;background:#2c3e50;color:white;font-weight:600;width:100%;">Scarica Tutti i Layer (ZIP)</button>
+                </div>
+            </div>
+
+            <!-- Import Layers section -->
+            <div class="control-section">
+                <h3>Importa Layer</h3>
+                <div style="font-size:11px;color:#666;margin-bottom:6px;">Carica un GeoJSON per sovrascrivere un layer esistente</div>
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <select id="import-layer-select" style="font-size:11px;padding:4px;border:1px solid #ccc;border-radius:3px;">
+                        <option value="">-- Seleziona layer --</option>
+                        <option value="annesso-d">PGTU - Annesso D</option>
+                        <option value="strade-prov">Strade Provinciali</option>
+                        <option value="extraurbane">Strade Extraurbane</option>
+                        <option value="flussi-bassi">Flussi Bassi (Tab. 1)</option>
+                        <option value="flussi-elevati">Flussi Elevati (Tab. 2)</option>
+                        <option value="linee-atac">Linee ATAC</option>
+                        <option value="rete-tpl-3">Rete TPL (3+ linee)</option>
+                        <option value="rete-tpl-5">Rete TPL (5+ linee)</option>
+                        <option value="centri-abitati">Centri Abitati</option>
+                    </select>
+                    <label class="edit-action-btn" style="font-size:12px;padding:6px 10px;background:#8e44ad;color:white;font-weight:600;text-align:center;cursor:pointer;">
+                        Carica GeoJSON
+                        <input type="file" id="import-layer-file" accept=".geojson,.json" style="display:none;">
+                    </label>
                 </div>
             </div>
         </div>
@@ -4966,6 +4991,8 @@
                         });
                     });
                     return makeGeoJSON('Disconnessioni_Classificazione', dcFeats);
+                case 'centri-abitati':
+                    return makeGeoJSON('Centri_Abitati', (typeof dataCentriAbitati !== 'undefined' ? dataCentriAbitati : {}).features || []);
                 default:
                     return null;
             }
@@ -5003,7 +5030,7 @@
             // Load JSZip if not already loaded
             function doZipExport() {
                 var zip = new JSZip();
-                var allKeys = ['municipi', 'annesso-d', 'grafo-2026', 'strade-prov', 'extraurbane', 'flussi-bassi', 'flussi-elevati', 'linee-atac', 'rete-tpl-3', 'rete-tpl-5', 'proposte', 'tpl5-no-pgtu', 'pgtu-no-tpl5', 'disconnessioni', 'disc-classificazione'];
+                var allKeys = ['municipi', 'annesso-d', 'grafo-2026', 'strade-prov', 'extraurbane', 'flussi-bassi', 'flussi-elevati', 'linee-atac', 'rete-tpl-3', 'rete-tpl-5', 'proposte', 'tpl5-no-pgtu', 'pgtu-no-tpl5', 'disconnessioni', 'disc-classificazione', 'centri-abitati'];
                 var count = 0;
                 allKeys.forEach(function(key) {
                     var geojson = getLayerGeoJSON(key);
@@ -5044,6 +5071,135 @@
                 doZipExport();
             }
         });
+
+        // =====================================================
+        // IMPORT LAYER FROM GEOJSON
+        // =====================================================
+        document.getElementById('import-layer-file').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            if (!file) return;
+            var layerKey = document.getElementById('import-layer-select').value;
+            if (!layerKey) {
+                alert('Seleziona prima il layer da sovrascrivere.');
+                e.target.value = '';
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function(ev) {
+                try {
+                    var geojson = JSON.parse(ev.target.result);
+                    if (!geojson.features) throw new Error('GeoJSON non valido: manca "features"');
+                } catch(err) {
+                    alert('Errore nel parsing del file: ' + err.message);
+                    return;
+                }
+                importLayerData(layerKey, geojson);
+                alert('Layer "' + layerKey + '" aggiornato con ' + geojson.features.length + ' features.');
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        function rebuildLeafletLayer(oldLayer, geojsonData, styleFunc, popupFunc, addToMap) {
+            if (oldLayer) {
+                var wasOnMap = map.hasLayer(oldLayer);
+                map.removeLayer(oldLayer);
+            } else {
+                var wasOnMap = addToMap || false;
+            }
+            var opts = {};
+            if (styleFunc) opts.style = styleFunc;
+            if (popupFunc) opts.onEachFeature = popupFunc;
+            var newLayer = L.geoJSON(geojsonData, opts);
+            if (wasOnMap) newLayer.addTo(map);
+            return newLayer;
+        }
+
+        function importLayerData(layerKey, geojson) {
+            switch (layerKey) {
+                case 'annesso-d':
+                    json_PGTUAnnessoD_5 = geojson;
+                    layerPGTU = rebuildLeafletLayer(layerPGTU, geojson, stylePGTU, popupPGTU, true);
+                    layerPGTUBlack = rebuildLeafletLayer(layerPGTUBlack, geojson, function() {
+                        return { color: '#000000', weight: 2.5, opacity: 1, lineCap: 'square', lineJoin: 'bevel' };
+                    }, popupPGTU, false);
+                    break;
+                case 'strade-prov':
+                    json_StradeProvinciali = geojson;
+                    stradeProvLoaded = false;
+                    if (layerStradeProvinciali) {
+                        var wasOn = map.hasLayer(layerStradeProvinciali);
+                        map.removeLayer(layerStradeProvinciali);
+                        layerStradeProvinciali = null;
+                        stradeProvLoaded = false;
+                        if (wasOn) { ensureStradeProvLayer(); if (layerStradeProvinciali) map.addLayer(layerStradeProvinciali); }
+                    }
+                    break;
+                case 'extraurbane':
+                    dataExtraurbane = geojson;
+                    extraurbaneLoaded = false;
+                    if (layerExtraurbane) {
+                        var wasOn = map.hasLayer(layerExtraurbane);
+                        map.removeLayer(layerExtraurbane);
+                        layerExtraurbane = null;
+                        extraurbaneLoaded = false;
+                        if (wasOn) { ensureExtraurbaneLayer(); if (layerExtraurbane) map.addLayer(layerExtraurbane); }
+                    }
+                    break;
+                case 'flussi-bassi':
+                    json_FlussiTomTomflussi_tomtom_3 = geojson;
+                    layerLowTraffic = rebuildLeafletLayer(layerLowTraffic, geojson, styleLowTraffic, popupLowTraffic, true);
+                    break;
+                case 'flussi-elevati':
+                    json_FlussiTomTomflussi_tomtom_2 = geojson;
+                    layerHighTraffic = rebuildLeafletLayer(layerHighTraffic, geojson, styleHighTraffic, popupHighTraffic, true);
+                    break;
+                case 'linee-atac':
+                    json_LineeATAC_4 = geojson;
+                    atacLoaded = false;
+                    if (layerATAC) {
+                        var wasOn = map.hasLayer(layerATAC);
+                        map.removeLayer(layerATAC);
+                        layerATAC = null;
+                        atacLoaded = false;
+                        if (wasOn) { ensureATACLayer(); if (layerATAC) map.addLayer(layerATAC); }
+                    }
+                    break;
+                case 'rete-tpl-3':
+                    dataReteTPL3 = geojson;
+                    tpl3Loaded = false;
+                    if (layerTPL3) {
+                        var wasOn = map.hasLayer(layerTPL3);
+                        map.removeLayer(layerTPL3);
+                        layerTPL3 = null;
+                        tpl3Loaded = false;
+                        if (wasOn) { ensureTPL3Layer(); if (layerTPL3) map.addLayer(layerTPL3); }
+                    }
+                    break;
+                case 'rete-tpl-5':
+                    dataReteTPL5 = geojson;
+                    tpl5Loaded = false;
+                    if (layerTPL5) {
+                        var wasOn = map.hasLayer(layerTPL5);
+                        map.removeLayer(layerTPL5);
+                        layerTPL5 = null;
+                        tpl5Loaded = false;
+                        if (wasOn) { ensureTPL5Layer(); if (layerTPL5) map.addLayer(layerTPL5); }
+                    }
+                    break;
+                case 'centri-abitati':
+                    dataCentriAbitati = geojson;
+                    centriAbitatiLoaded = false;
+                    if (layerCentriAbitati) {
+                        var wasOn = map.hasLayer(layerCentriAbitati);
+                        map.removeLayer(layerCentriAbitati);
+                        layerCentriAbitati = null;
+                        centriAbitatiLoaded = false;
+                        if (wasOn) { ensureCentriAbitatiLayer(); if (layerCentriAbitati) map.addLayer(layerCentriAbitati); }
+                    }
+                    break;
+            }
+        }
 
         // =====================================================
         // HIDE LOADING OVERLAY
