@@ -1088,7 +1088,10 @@
         var map = L.map('map', {
             center: [41.9028, 12.4964],
             zoom: 11,
-            zoomControl: true
+            zoomControl: true,
+            zoomSnap: 1,
+            zoomDelta: 1,
+            wheelDebounceTime: 80
         });
 
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -4342,7 +4345,7 @@
             }
             features.forEach(function(f) {
                 if (!f.geometry) return;
-                var color = classificaColors[f.classifica] || '#888888';
+                var color = classificaColors[f.classifica] || (f.source === 'Proposta Inserimento' ? '#006400' : '#888888');
                 var geoLayer = L.geoJSON(f.geometry, {
                     style: function() {
                         return {
