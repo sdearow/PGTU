@@ -4374,40 +4374,85 @@
             // Snap tolerance in degrees (~25 meters at Rome's latitude)
             var SNAP = 0.000225;
 
-            // Build a grid-based spatial index for fast neighbor lookup
+            // Helper: minimum distance from point (px,py) to segment (ax,ay)-(bx,by)
+            function pointToSegmentDist(px, py, ax, ay, bx, by) {
+                var dx = bx - ax, dy = by - ay;
+                var lenSq = dx * dx + dy * dy;
+                if (lenSq === 0) {
+                    var ex = px - ax, ey = py - ay;
+                    return Math.sqrt(ex * ex + ey * ey);
+                }
+                var t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+                if (t < 0) t = 0;
+                else if (t > 1) t = 1;
+                var cx = ax + t * dx - px;
+                var cy = ay + t * dy - py;
+                return Math.sqrt(cx * cx + cy * cy);
+            }
+
+            // Build a grid-based spatial index for line SEGMENTS (not just endpoints)
             var cellSize = SNAP * 2;
-            var grid = {};
+            var segGrid = {};
             function cellKey(lng, lat) {
                 return Math.floor(lng / cellSize) + ',' + Math.floor(lat / cellSize);
             }
-            endpoints.forEach(function(ep, i) {
-                var key = cellKey(ep.lng, ep.lat);
-                if (!grid[key]) grid[key] = [];
-                grid[key].push(i);
+            // Index all line segments into the grid by their bounding box cells
+            var allSegments = []; // {featureIdx, ax, ay, bx, by}
+            features.forEach(function(f, idx) {
+                if (!f.geometry) return;
+                var coords = f.geometry.coordinates;
+                var geomType = f.geometry.type;
+                var lines = [];
+                if (geomType === 'LineString') {
+                    lines.push(coords);
+                } else if (geomType === 'MultiLineString') {
+                    lines = coords;
+                }
+                lines.forEach(function(line) {
+                    if (!line || line.length < 2) return;
+                    for (var k = 0; k < line.length - 1; k++) {
+                        var segIdx = allSegments.length;
+                        allSegments.push({
+                            featureIdx: idx,
+                            ax: line[k][0], ay: line[k][1],
+                            bx: line[k + 1][0], by: line[k + 1][1]
+                        });
+                        // Insert segment into all grid cells its bbox touches
+                        var minLng = Math.min(line[k][0], line[k + 1][0]) - SNAP;
+                        var maxLng = Math.max(line[k][0], line[k + 1][0]) + SNAP;
+                        var minLat = Math.min(line[k][1], line[k + 1][1]) - SNAP;
+                        var maxLat = Math.max(line[k][1], line[k + 1][1]) + SNAP;
+                        var cxMin = Math.floor(minLng / cellSize);
+                        var cxMax = Math.floor(maxLng / cellSize);
+                        var cyMin = Math.floor(minLat / cellSize);
+                        var cyMax = Math.floor(maxLat / cellSize);
+                        for (var gx = cxMin; gx <= cxMax; gx++) {
+                            for (var gy = cyMin; gy <= cyMax; gy++) {
+                                var gkey = gx + ',' + gy;
+                                if (!segGrid[gkey]) segGrid[gkey] = [];
+                                segGrid[gkey].push(segIdx);
+                            }
+                        }
+                    }
+                });
             });
 
-            // For each endpoint, check if any OTHER link's endpoint is within SNAP
+            // For each endpoint, check if any segment of a DIFFERENT link is within SNAP
             var disconnectedPoints = [];
             endpoints.forEach(function(ep, i) {
                 var cx = Math.floor(ep.lng / cellSize);
                 var cy = Math.floor(ep.lat / cellSize);
                 var found = false;
-                // Check 3x3 neighborhood
-                for (var dx = -1; dx <= 1 && !found; dx++) {
-                    for (var dy = -1; dy <= 1 && !found; dy++) {
-                        var key = (cx + dx) + ',' + (cy + dy);
-                        var bucket = grid[key];
-                        if (!bucket) continue;
-                        for (var j = 0; j < bucket.length; j++) {
-                            var other = endpoints[bucket[j]];
-                            // Must be a different feature (different link)
-                            if (other.featureIdx === ep.featureIdx) continue;
-                            var dlng = Math.abs(ep.lng - other.lng);
-                            var dlat = Math.abs(ep.lat - other.lat);
-                            if (dlng <= SNAP && dlat <= SNAP) {
-                                found = true;
-                                break;
-                            }
+                var key = cx + ',' + cy;
+                var bucket = segGrid[key];
+                if (bucket) {
+                    for (var j = 0; j < bucket.length; j++) {
+                        var seg = allSegments[bucket[j]];
+                        if (seg.featureIdx === ep.featureIdx) continue;
+                        var dist = pointToSegmentDist(ep.lng, ep.lat, seg.ax, seg.ay, seg.bx, seg.by);
+                        if (dist <= SNAP) {
+                            found = true;
+                            break;
                         }
                     }
                 }
