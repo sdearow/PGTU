@@ -1268,40 +1268,64 @@
                         interactive: false
                     }).addTo(map);
                 }
-            } catch(e) { console.warn('Outer Municipi border:', e); }
+            } catch(e) { console.warn('Outer Municipi border merge failed:', e); }
+            if (!mergedMunicipiBoundary) console.warn('mergedMunicipiBoundary is null - strade filter will be skipped!');
         })();
 
-        // Strade Provinciali layer (off by default, behind all other layers)
-        // Filter to only show segments outside the Municipi boundary
+        // Strade Provinciali layer - clip to only show segments inside Municipi
         function filterStradeInsideMunicipi(geojson) {
             if (!mergedMunicipiBoundary || !geojson || !geojson.features) return geojson;
+            var boundary = mergedMunicipiBoundary;
             var outFeatures = [];
+
+            function findBoundaryCrossing(a, b) {
+                try {
+                    var seg = turf.lineString([a, b]);
+                    var pts = turf.lineIntersect(seg, boundary);
+                    if (pts.features.length > 0) {
+                        return pts.features[0].geometry.coordinates;
+                    }
+                } catch(e) {}
+                return null;
+            }
+
             geojson.features.forEach(function(f) {
                 if (!f.geometry) return;
                 var coords = f.geometry.type === 'LineString' ? [f.geometry.coordinates] :
                              f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : null;
-                if (!coords) { outFeatures.push(f); return; }
+                if (!coords) return;
                 coords.forEach(function(line) {
-                    var insideSegments = [];
                     var currentSegment = [];
                     for (var i = 0; i < line.length; i++) {
-                        var pt = turf.point(line[i]);
-                        var inside = turf.booleanPointInPolygon(pt, mergedMunicipiBoundary);
-                        if (inside) {
+                        var ptInside = turf.booleanPointInPolygon(turf.point(line[i]), boundary);
+                        if (ptInside) {
+                            if (i > 0 && currentSegment.length === 0) {
+                                var cross = findBoundaryCrossing(line[i-1], line[i]);
+                                if (cross) currentSegment.push(cross);
+                            }
                             currentSegment.push(line[i]);
                         } else {
-                            if (currentSegment.length >= 2) insideSegments.push(currentSegment);
-                            currentSegment = [];
+                            if (currentSegment.length > 0) {
+                                var cross = findBoundaryCrossing(line[i-1], line[i]);
+                                if (cross) currentSegment.push(cross);
+                                if (currentSegment.length >= 2) {
+                                    outFeatures.push({
+                                        type: 'Feature',
+                                        properties: f.properties,
+                                        geometry: { type: 'LineString', coordinates: currentSegment }
+                                    });
+                                }
+                                currentSegment = [];
+                            }
                         }
                     }
-                    if (currentSegment.length >= 2) insideSegments.push(currentSegment);
-                    insideSegments.forEach(function(seg) {
+                    if (currentSegment.length >= 2) {
                         outFeatures.push({
                             type: 'Feature',
                             properties: f.properties,
-                            geometry: { type: 'LineString', coordinates: seg }
+                            geometry: { type: 'LineString', coordinates: currentSegment }
                         });
-                    });
+                    }
                 });
             });
             return { type: 'FeatureCollection', features: outFeatures };
