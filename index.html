@@ -1306,26 +1306,13 @@
             if (centriAbitatiLoaded) return;
             centriAbitatiLoaded = true;
             if (typeof dataCentriAbitati !== 'undefined') {
-                // Convert LineStrings to Polygons so they can be filled
-                var polyData = JSON.parse(JSON.stringify(dataCentriAbitati));
-                (polyData.features || []).forEach(function(f) {
-                    if (f.geometry && f.geometry.type === 'LineString') {
-                        f.geometry.type = 'Polygon';
-                        f.geometry.coordinates = [f.geometry.coordinates];
-                    } else if (f.geometry && f.geometry.type === 'MultiLineString') {
-                        f.geometry.type = 'MultiPolygon';
-                        f.geometry.coordinates = f.geometry.coordinates.map(function(ring) { return [ring]; });
-                    }
-                });
-                layerCentriAbitati = L.geoJSON(polyData, {
+                layerCentriAbitati = L.geoJSON(dataCentriAbitati, {
                     pane: 'backgroundPane',
                     style: function() {
                         return {
                             color: '#4A0E4E',
                             weight: 2,
-                            opacity: 0.8,
-                            fillColor: '#4A0E4E',
-                            fillOpacity: 0.12
+                            opacity: 0.8
                         };
                     }
                 });
