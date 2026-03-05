@@ -1099,6 +1099,10 @@
         // Make base tiles grayscale so layers stand out
         document.querySelector('.leaflet-tile-pane').style.filter = 'saturate(0) brightness(1.05)';
 
+        // Custom pane for background layers (above tiles at 200, below overlays at 400)
+        map.createPane('backgroundPane');
+        map.getPane('backgroundPane').style.zIndex = 250;
+
         // =====================================================
         // STYLE FUNCTIONS
         // =====================================================
@@ -1303,12 +1307,14 @@
             centriAbitatiLoaded = true;
             if (typeof dataCentriAbitati !== 'undefined') {
                 layerCentriAbitati = L.geoJSON(dataCentriAbitati, {
+                    pane: 'backgroundPane',
                     style: function() {
                         return {
-                            color: '#FF1493',
+                            color: '#4A0E4E',
                             weight: 2,
-                            opacity: 0.7,
-                            dashArray: '6,4'
+                            opacity: 0.8,
+                            fillColor: '#4A0E4E',
+                            fillOpacity: 0.12
                         };
                     }
                 });
@@ -3863,8 +3869,6 @@
                 ensureCentriAbitatiLayer();
                 if (layerCentriAbitati) {
                     map.addLayer(layerCentriAbitati);
-                    // Keep centri abitati behind other layers
-                    layerCentriAbitati.bringToBack();
                 }
             } else {
                 if (layerCentriAbitati) map.removeLayer(layerCentriAbitati);
