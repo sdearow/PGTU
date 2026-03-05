@@ -977,6 +977,8 @@
                         <option value="rete-tpl-3">Rete TPL (3+ linee)</option>
                         <option value="rete-tpl-5">Rete TPL (5+ linee)</option>
                         <option value="centri-abitati">Centri Abitati</option>
+                        <option value="disconnessioni">Disconnessioni Grafo</option>
+                        <option value="disc-classificazione">Disconnessioni Classificazione</option>
                     </select>
                     <label class="edit-action-btn" style="font-size:12px;padding:6px 10px;background:#8e44ad;color:white;font-weight:600;text-align:center;cursor:pointer;">
                         Carica GeoJSON
@@ -1596,17 +1598,21 @@
                 // Reset grafo cache so next access rebuilds from scratch
                 grafo2026Features = null;
                 if (grafo2026Active) rebuildGrafo2026();
-                // Recompute classification disconnections if active (even if grafo layer is off)
-                else if (typeof discClassComputed !== 'undefined' && document.getElementById('toggle-disc-classificazione') && document.getElementById('toggle-disc-classificazione').checked) {
-                    discClassComputed = false;
-                    computeDiscClassificazione();
-                } else if (typeof discClassComputed !== 'undefined') {
-                    discClassComputed = false;
+                // Recompute classification disconnections if active (skip if imported)
+                if (!discClassImported) {
+                    if (typeof discClassComputed !== 'undefined' && document.getElementById('toggle-disc-classificazione') && document.getElementById('toggle-disc-classificazione').checked) {
+                        discClassComputed = false;
+                        computeDiscClassificazione();
+                    } else if (typeof discClassComputed !== 'undefined') {
+                        discClassComputed = false;
+                    }
                 }
-                // Recompute graph disconnections since they depend on Grafo 2026
-                disconnessioniComputed = false;
-                if (document.getElementById('toggle-disconnessioni').checked) {
-                    computeDisconnessioni();
+                // Recompute graph disconnections since they depend on Grafo 2026 (skip if imported)
+                if (!disconnessioniImported) {
+                    disconnessioniComputed = false;
+                    if (document.getElementById('toggle-disconnessioni').checked) {
+                        computeDisconnessioni();
+                    }
                 }
             }
         }
@@ -4149,8 +4155,8 @@
             try {
                 localStorage.setItem(GRAFO_KEY, JSON.stringify(features));
             } catch(e) { console.warn('Grafo save error (localStorage quota?):', e); }
-            // Invalidate classification disconnections so they recompute on next toggle/check
-            if (typeof discClassComputed !== 'undefined') {
+            // Invalidate classification disconnections so they recompute on next toggle/check (skip if imported)
+            if (typeof discClassComputed !== 'undefined' && !discClassImported) {
                 discClassComputed = false;
                 var dcToggle = document.getElementById('toggle-disc-classificazione');
                 if (dcToggle && dcToggle.checked) {
@@ -4416,6 +4422,7 @@
         // =====================================================
         var layerDisconnessioni = L.layerGroup();
         var disconnessioniComputed = false;
+        var disconnessioniImported = false;
         var resolvedDisconnessioni = JSON.parse(localStorage.getItem('pgtu_resolved_disc') || '[]');
 
         function discKey(ep) {
@@ -4626,6 +4633,7 @@
             resolvedDisconnessioni = [];
             localStorage.removeItem('pgtu_resolved_disc');
             disconnessioniComputed = false;
+            disconnessioniImported = false;
             layerDisconnessioni.clearLayers();
             if (document.getElementById('toggle-disconnessioni').checked) {
                 computeDisconnessioni();
@@ -4640,6 +4648,7 @@
         // =====================================================
         var layerDiscClassificazione = L.layerGroup();
         var discClassComputed = false;
+        var discClassImported = false;
         var resolvedDiscClass = JSON.parse(localStorage.getItem('pgtu_resolved_disc_class') || '[]');
 
         // Allowed adjacency rules
@@ -4856,6 +4865,7 @@
             resolvedDiscClass = [];
             localStorage.removeItem('pgtu_resolved_disc_class');
             discClassComputed = false;
+            discClassImported = false;
             layerDiscClassificazione.clearLayers();
             if (document.getElementById('toggle-disc-classificazione').checked) {
                 computeDiscClassificazione();
@@ -5197,6 +5207,78 @@
                         centriAbitatiLoaded = false;
                         if (wasOn) { ensureCentriAbitatiLayer(); if (layerCentriAbitati) map.addLayer(layerCentriAbitati); }
                     }
+                    break;
+                case 'disconnessioni':
+                    var wasDiscOn = map.hasLayer(layerDisconnessioni);
+                    layerDisconnessioni.clearLayers();
+                    resolvedDisconnessioni = [];
+                    localStorage.removeItem('pgtu_resolved_disc');
+                    geojson.features.forEach(function(f) {
+                        if (!f.geometry || f.geometry.type !== 'Point') return;
+                        var p = f.properties || {};
+                        var lng = f.geometry.coordinates[0], lat = f.geometry.coordinates[1];
+                        var marker = L.circleMarker([lat, lng], {
+                            radius: 6, color: '#c0392b', fillColor: '#e74c3c', fillOpacity: 0.9, weight: 2
+                        });
+                        marker._discStrada = p.strada || '';
+                        marker._discWhich = p.estremo || '';
+                        marker._discFeatureIdx = p.featureIdx || 0;
+                        var key = lng.toFixed(6) + '|' + lat.toFixed(6) + '|' + (p.featureIdx || 0) + '|' + (p.estremo || '');
+                        var markerId = L.stamp(marker);
+                        var html = '<div class="popup-title">Endpoint disconnesso</div>';
+                        html += '<span class="popup-layer-badge" style="background:#c0392b;">Gap rete</span>';
+                        html += '<table class="popup-table">';
+                        html += popupRow('Strada', p.strada || '(senza nome)');
+                        html += popupRow('Estremo', p.estremo === 'start' ? 'Inizio arco' : 'Fine arco');
+                        html += popupRow('Coordinate', lat.toFixed(6) + ', ' + lng.toFixed(6));
+                        html += '</table>';
+                        html += '<button onclick="resolveDisconnessione(\'' + key.replace(/'/g, "\\'") + '\',' + markerId + ')" style="margin-top:8px;padding:4px 12px;background:#27ae60;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Risolto &#10003;</button>';
+                        marker.bindPopup(html, { maxWidth: 300 });
+                        layerDisconnessioni.addLayer(marker);
+                    });
+                    disconnessioniComputed = true;
+                    disconnessioniImported = true;
+                    updateDiscCount();
+                    if (wasDiscOn) layerDisconnessioni.bringToFront();
+                    else { map.addLayer(layerDisconnessioni); document.getElementById('toggle-disconnessioni').checked = true; }
+                    break;
+                case 'disc-classificazione':
+                    var wasDcOn = map.hasLayer(layerDiscClassificazione);
+                    layerDiscClassificazione.clearLayers();
+                    resolvedDiscClass = [];
+                    localStorage.removeItem('pgtu_resolved_disc_class');
+                    var classificaNames = { 'A': 'Autostrade', 'S': 'Scorrimento', 'IQ': 'Interquartiere', 'Q': 'Quartiere', 'IZ': 'Interzonali', 'EX': 'Extraurbana' };
+                    geojson.features.forEach(function(f) {
+                        if (!f.geometry || f.geometry.type !== 'Point') return;
+                        var p = f.properties || {};
+                        var lng = f.geometry.coordinates[0], lat = f.geometry.coordinates[1];
+                        var marker = L.circleMarker([lat, lng], {
+                            radius: 6, color: '#0d47a1', fillColor: '#1565c0', fillOpacity: 0.9, weight: 2
+                        });
+                        marker._dcStrada = p.strada || '';
+                        marker._dcClassifica = p.classificazione || '';
+                        marker._dcAdiacente = p.classe_adiacente || '';
+                        marker._dcWhich = p.estremo || '';
+                        var vkey = lng.toFixed(6) + '|' + lat.toFixed(6) + '|' + (p.featureIdx || 0) + '|' + (p.estremo || '');
+                        var markerId = L.stamp(marker);
+                        var html = '<div class="popup-title">Discontinuit&agrave; classificazione</div>';
+                        html += '<span class="popup-layer-badge" style="background:#1565c0;">Classe incompatibile</span>';
+                        html += '<table class="popup-table">';
+                        html += popupRow('Strada', p.strada || '(senza nome)');
+                        html += popupRow('Classe', (classificaNames[p.classificazione] || p.classificazione) + ' (' + (p.classificazione || '') + ')');
+                        html += popupRow('Tocca', (p.strada || '') + ' - ' + (classificaNames[p.classe_adiacente] || p.classe_adiacente) + ' (' + (p.classe_adiacente || '') + ')');
+                        html += popupRow('Estremo', p.estremo === 'start' ? 'Inizio arco' : 'Fine arco');
+                        html += popupRow('Coordinate', lat.toFixed(6) + ', ' + lng.toFixed(6));
+                        html += '</table>';
+                        html += '<button onclick="resolveDiscClass(\'' + vkey.replace(/'/g, "\\'") + '\',' + markerId + ')" style="margin-top:8px;padding:4px 12px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Risolto &#10003;</button>';
+                        marker.bindPopup(html, { maxWidth: 320 });
+                        layerDiscClassificazione.addLayer(marker);
+                    });
+                    discClassComputed = true;
+                    discClassImported = true;
+                    updateDiscClassCount();
+                    if (wasDcOn) layerDiscClassificazione.bringToFront();
+                    else { map.addLayer(layerDiscClassificazione); document.getElementById('toggle-disc-classificazione').checked = true; }
                     break;
             }
         }
