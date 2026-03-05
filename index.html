@@ -1243,6 +1243,7 @@
         }).addTo(map);
 
         // Outer boundary of all Municipi merged together
+        var mergedMunicipiBoundary = null;
         (function() {
             try {
                 var merged = null;
@@ -1255,6 +1256,7 @@
                     }
                 });
                 if (merged) {
+                    mergedMunicipiBoundary = merged;
                     L.geoJSON(merged, {
                         style: {
                             color: '#1a1a1a',
@@ -1270,13 +1272,49 @@
         })();
 
         // Strade Provinciali layer (off by default, behind all other layers)
+        // Filter to only show segments outside the Municipi boundary
+        function filterStradeOutsideMunicipi(geojson) {
+            if (!mergedMunicipiBoundary || !geojson || !geojson.features) return geojson;
+            var outFeatures = [];
+            geojson.features.forEach(function(f) {
+                if (!f.geometry) return;
+                var coords = f.geometry.type === 'LineString' ? [f.geometry.coordinates] :
+                             f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : null;
+                if (!coords) { outFeatures.push(f); return; }
+                coords.forEach(function(line) {
+                    var outsideSegments = [];
+                    var currentSegment = [];
+                    for (var i = 0; i < line.length; i++) {
+                        var pt = turf.point(line[i]);
+                        var inside = turf.booleanPointInPolygon(pt, mergedMunicipiBoundary);
+                        if (!inside) {
+                            currentSegment.push(line[i]);
+                        } else {
+                            if (currentSegment.length >= 2) outsideSegments.push(currentSegment);
+                            currentSegment = [];
+                        }
+                    }
+                    if (currentSegment.length >= 2) outsideSegments.push(currentSegment);
+                    outsideSegments.forEach(function(seg) {
+                        outFeatures.push({
+                            type: 'Feature',
+                            properties: f.properties,
+                            geometry: { type: 'LineString', coordinates: seg }
+                        });
+                    });
+                });
+            });
+            return { type: 'FeatureCollection', features: outFeatures };
+        }
+
         var layerStradeProvinciali = null;
         var stradeProvLoaded = false;
         function ensureStradeProvLayer() {
             if (stradeProvLoaded) return;
             stradeProvLoaded = true;
             if (typeof json_StradeProvinciali !== 'undefined') {
-                layerStradeProvinciali = L.geoJSON(json_StradeProvinciali, {
+                var filteredStrade = filterStradeOutsideMunicipi(json_StradeProvinciali);
+                layerStradeProvinciali = L.geoJSON(filteredStrade, {
                     style: function() {
                         return {
                             color: '#008000',
