@@ -1273,7 +1273,7 @@
 
         // Strade Provinciali layer (off by default, behind all other layers)
         // Filter to only show segments outside the Municipi boundary
-        function filterStradeOutsideMunicipi(geojson) {
+        function filterStradeInsideMunicipi(geojson) {
             if (!mergedMunicipiBoundary || !geojson || !geojson.features) return geojson;
             var outFeatures = [];
             geojson.features.forEach(function(f) {
@@ -1282,20 +1282,20 @@
                              f.geometry.type === 'MultiLineString' ? f.geometry.coordinates : null;
                 if (!coords) { outFeatures.push(f); return; }
                 coords.forEach(function(line) {
-                    var outsideSegments = [];
+                    var insideSegments = [];
                     var currentSegment = [];
                     for (var i = 0; i < line.length; i++) {
                         var pt = turf.point(line[i]);
                         var inside = turf.booleanPointInPolygon(pt, mergedMunicipiBoundary);
-                        if (!inside) {
+                        if (inside) {
                             currentSegment.push(line[i]);
                         } else {
-                            if (currentSegment.length >= 2) outsideSegments.push(currentSegment);
+                            if (currentSegment.length >= 2) insideSegments.push(currentSegment);
                             currentSegment = [];
                         }
                     }
-                    if (currentSegment.length >= 2) outsideSegments.push(currentSegment);
-                    outsideSegments.forEach(function(seg) {
+                    if (currentSegment.length >= 2) insideSegments.push(currentSegment);
+                    insideSegments.forEach(function(seg) {
                         outFeatures.push({
                             type: 'Feature',
                             properties: f.properties,
@@ -1313,7 +1313,7 @@
             if (stradeProvLoaded) return;
             stradeProvLoaded = true;
             if (typeof json_StradeProvinciali !== 'undefined') {
-                var filteredStrade = filterStradeOutsideMunicipi(json_StradeProvinciali);
+                var filteredStrade = filterStradeInsideMunicipi(json_StradeProvinciali);
                 layerStradeProvinciali = L.geoJSON(filteredStrade, {
                     style: function() {
                         return {
@@ -4984,7 +4984,7 @@
                     });
                     return makeGeoJSON('PGTU_Grafo_2026', grafoFeatures);
                 case 'strade-prov':
-                    var filteredSP = filterStradeOutsideMunicipi(typeof json_StradeProvinciali !== 'undefined' ? json_StradeProvinciali : {});
+                    var filteredSP = filterStradeInsideMunicipi(typeof json_StradeProvinciali !== 'undefined' ? json_StradeProvinciali : {});
                     return makeGeoJSON('Strade_Provinciali', filteredSP.features || []);
                 case 'extraurbane':
                     return makeGeoJSON('Strade_Extraurbane', (typeof dataExtraurbane !== 'undefined' ? dataExtraurbane : {}).features || []);
