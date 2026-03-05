@@ -1272,22 +1272,42 @@
             if (!mergedMunicipiBoundary) console.warn('mergedMunicipiBoundary is null - strade filter will be skipped!');
         })();
 
-        // Strade Provinciali layer - clip to only show segments inside Municipi
-        function filterStradeInsideMunicipi(geojson) {
-            if (!mergedMunicipiBoundary || !geojson || !geojson.features) return geojson;
-            var boundary = mergedMunicipiBoundary;
-            var outFeatures = [];
+        // Collect individual Municipi polygons for robust point-in-polygon checks
+        var municipiPolygons = [];
+        layerMunicipii.eachLayer(function(layer) {
+            municipiPolygons.push(layer.toGeoJSON());
+        });
 
-            function findBoundaryCrossing(a, b) {
-                try {
-                    var seg = turf.lineString([a, b]);
-                    var pts = turf.lineIntersect(seg, boundary);
-                    if (pts.features.length > 0) {
-                        return pts.features[0].geometry.coordinates;
-                    }
-                } catch(e) {}
-                return null;
+        // Strade Provinciali layer - clip to only show segments inside Municipi
+        function isPointInsideMunicipi(pt) {
+            if (mergedMunicipiBoundary) {
+                return turf.booleanPointInPolygon(pt, mergedMunicipiBoundary);
             }
+            for (var i = 0; i < municipiPolygons.length; i++) {
+                if (turf.booleanPointInPolygon(pt, municipiPolygons[i])) return true;
+            }
+            return false;
+        }
+
+        function findBoundaryCrossing(a, b) {
+            try {
+                var seg = turf.lineString([a, b]);
+                if (mergedMunicipiBoundary) {
+                    var pts = turf.lineIntersect(seg, mergedMunicipiBoundary);
+                    if (pts.features.length > 0) return pts.features[0].geometry.coordinates;
+                } else {
+                    for (var i = 0; i < municipiPolygons.length; i++) {
+                        var pts = turf.lineIntersect(seg, municipiPolygons[i]);
+                        if (pts.features.length > 0) return pts.features[0].geometry.coordinates;
+                    }
+                }
+            } catch(e) {}
+            return null;
+        }
+
+        function filterStradeInsideMunicipi(geojson) {
+            if ((!mergedMunicipiBoundary && municipiPolygons.length === 0) || !geojson || !geojson.features) return geojson;
+            var outFeatures = [];
 
             geojson.features.forEach(function(f) {
                 if (!f.geometry) return;
@@ -1297,7 +1317,7 @@
                 coords.forEach(function(line) {
                     var currentSegment = [];
                     for (var i = 0; i < line.length; i++) {
-                        var ptInside = turf.booleanPointInPolygon(turf.point(line[i]), boundary);
+                        var ptInside = isPointInsideMunicipi(turf.point(line[i]));
                         if (ptInside) {
                             if (i > 0 && currentSegment.length === 0) {
                                 var cross = findBoundaryCrossing(line[i-1], line[i]);
