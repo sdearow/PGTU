@@ -795,6 +795,12 @@
                     <span id="disconnessioni-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
                     <button id="btn-reset-disc" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
                 </div>
+                <div class="layer-toggle" style="margin-top:4px;">
+                    <input type="checkbox" id="toggle-disc-classificazione">
+                    <label for="toggle-disc-classificazione" style="font-weight:600;color:#1565c0;">&#9679; Disconnessioni Classificazione</label>
+                    <span id="disc-class-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
+                    <button id="btn-reset-disc-class" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
+                </div>
             </div>
 
             <div class="control-section">
@@ -940,6 +946,10 @@
                     <button class="edit-action-btn btn-export-layer" data-layer="rete-tpl-3" style="font-size:11px;padding:4px 8px;text-align:left;">Rete TPL (3+ linee)</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="rete-tpl-5" style="font-size:11px;padding:4px 8px;text-align:left;">Rete TPL (5+ linee)</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="proposte" style="font-size:11px;padding:4px 8px;text-align:left;">Proposte (eliminazioni + inserimenti)</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="tpl5-no-pgtu" style="font-size:11px;padding:4px 8px;text-align:left;">TPL 5+ non in Annesso D</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="pgtu-no-tpl5" style="font-size:11px;padding:4px 8px;text-align:left;">Annesso D non in TPL 5+</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="disconnessioni" style="font-size:11px;padding:4px 8px;text-align:left;">Disconnessioni Grafo</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="disc-classificazione" style="font-size:11px;padding:4px 8px;text-align:left;">Disconnessioni Classificazione</button>
                 </div>
                 <div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
                     <button class="edit-action-btn" id="btn-export-all-layers" style="font-size:12px;padding:6px 10px;background:#2c3e50;color:white;font-weight:600;width:100%;">Scarica Tutti i Layer (ZIP)</button>
@@ -1530,8 +1540,17 @@
             updateProposteCounter();
 
             // Sync: rebuild Grafo 2026 when proposte change
-            if (typeof rebuildGrafo2026 === 'function' && grafo2026Active) {
-                rebuildGrafo2026();
+            if (typeof rebuildGrafo2026 === 'function') {
+                // Reset grafo cache so next access rebuilds from scratch
+                grafo2026Features = null;
+                if (grafo2026Active) rebuildGrafo2026();
+                // Recompute classification disconnections if active (even if grafo layer is off)
+                else if (typeof discClassComputed !== 'undefined' && document.getElementById('toggle-disc-classificazione') && document.getElementById('toggle-disc-classificazione').checked) {
+                    discClassComputed = false;
+                    computeDiscClassificazione();
+                } else if (typeof discClassComputed !== 'undefined') {
+                    discClassComputed = false;
+                }
             }
         }
 
@@ -4060,6 +4079,15 @@
             try {
                 localStorage.setItem(GRAFO_KEY, JSON.stringify(features));
             } catch(e) { console.warn('Grafo save error (localStorage quota?):', e); }
+            // Invalidate classification disconnections so they recompute on next toggle/check
+            if (typeof discClassComputed !== 'undefined') {
+                discClassComputed = false;
+                var dcToggle = document.getElementById('toggle-disc-classificazione');
+                if (dcToggle && dcToggle.checked) {
+                    // Defer to avoid recursion during initialization
+                    setTimeout(function() { computeDiscClassificazione(); }, 0);
+                }
+            }
         }
 
         function buildInitialGrafo() {
@@ -4329,6 +4357,22 @@
             document.getElementById('disconnessioni-count').textContent = '(' + count + ' punti)';
         }
 
+        // Shared helper: minimum distance from point to segment
+        function pointToSegmentDist(px, py, ax, ay, bx, by) {
+            var dx = bx - ax, dy = by - ay;
+            var lenSq = dx * dx + dy * dy;
+            if (lenSq === 0) {
+                var ex = px - ax, ey = py - ay;
+                return Math.sqrt(ex * ex + ey * ey);
+            }
+            var t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+            if (t < 0) t = 0;
+            else if (t > 1) t = 1;
+            var cx = ax + t * dx - px;
+            var cy = ay + t * dy - py;
+            return Math.sqrt(cx * cx + cy * cy);
+        }
+
         function computeDisconnessioni() {
             if (disconnessioniComputed) return;
             disconnessioniComputed = true;
@@ -4374,22 +4418,6 @@
             // Snap tolerance in degrees (~25 meters at Rome's latitude)
             var SNAP = 0.000225;
 
-            // Helper: minimum distance from point (px,py) to segment (ax,ay)-(bx,by)
-            function pointToSegmentDist(px, py, ax, ay, bx, by) {
-                var dx = bx - ax, dy = by - ay;
-                var lenSq = dx * dx + dy * dy;
-                if (lenSq === 0) {
-                    var ex = px - ax, ey = py - ay;
-                    return Math.sqrt(ex * ex + ey * ey);
-                }
-                var t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
-                if (t < 0) t = 0;
-                else if (t > 1) t = 1;
-                var cx = ax + t * dx - px;
-                var cy = ay + t * dy - py;
-                return Math.sqrt(cx * cx + cy * cy);
-            }
-
             // Build a grid-based spatial index for line SEGMENTS (not just endpoints)
             var cellSize = SNAP * 2;
             var segGrid = {};
@@ -4398,44 +4426,52 @@
             }
             // Index all line segments into the grid by their bounding box cells
             var allSegments = []; // {featureIdx, ax, ay, bx, by}
-            features.forEach(function(f, idx) {
-                if (!f.geometry) return;
-                var coords = f.geometry.coordinates;
-                var geomType = f.geometry.type;
-                var lines = [];
-                if (geomType === 'LineString') {
-                    lines.push(coords);
-                } else if (geomType === 'MultiLineString') {
-                    lines = coords;
-                }
-                lines.forEach(function(line) {
-                    if (!line || line.length < 2) return;
-                    for (var k = 0; k < line.length - 1; k++) {
-                        var segIdx = allSegments.length;
-                        allSegments.push({
-                            featureIdx: idx,
-                            ax: line[k][0], ay: line[k][1],
-                            bx: line[k + 1][0], by: line[k + 1][1]
-                        });
-                        // Insert segment into all grid cells its bbox touches
-                        var minLng = Math.min(line[k][0], line[k + 1][0]) - SNAP;
-                        var maxLng = Math.max(line[k][0], line[k + 1][0]) + SNAP;
-                        var minLat = Math.min(line[k][1], line[k + 1][1]) - SNAP;
-                        var maxLat = Math.max(line[k][1], line[k + 1][1]) + SNAP;
-                        var cxMin = Math.floor(minLng / cellSize);
-                        var cxMax = Math.floor(maxLng / cellSize);
-                        var cyMin = Math.floor(minLat / cellSize);
-                        var cyMax = Math.floor(maxLat / cellSize);
-                        for (var gx = cxMin; gx <= cxMax; gx++) {
-                            for (var gy = cyMin; gy <= cyMax; gy++) {
-                                var gkey = gx + ',' + gy;
-                                if (!segGrid[gkey]) segGrid[gkey] = [];
-                                segGrid[gkey].push(segIdx);
+            function indexFeaturesSegments(feats, idxOffset) {
+                feats.forEach(function(f, idx) {
+                    if (!f.geometry) return;
+                    var coords = f.geometry.coordinates;
+                    var geomType = f.geometry.type;
+                    var lines = [];
+                    if (geomType === 'LineString') {
+                        lines.push(coords);
+                    } else if (geomType === 'MultiLineString') {
+                        lines = coords;
+                    }
+                    lines.forEach(function(line) {
+                        if (!line || line.length < 2) return;
+                        for (var k = 0; k < line.length - 1; k++) {
+                            var segIdx = allSegments.length;
+                            allSegments.push({
+                                featureIdx: idxOffset + idx,
+                                ax: line[k][0], ay: line[k][1],
+                                bx: line[k + 1][0], by: line[k + 1][1]
+                            });
+                            var minLng = Math.min(line[k][0], line[k + 1][0]) - SNAP;
+                            var maxLng = Math.max(line[k][0], line[k + 1][0]) + SNAP;
+                            var minLat = Math.min(line[k][1], line[k + 1][1]) - SNAP;
+                            var maxLat = Math.max(line[k][1], line[k + 1][1]) + SNAP;
+                            var cxMin = Math.floor(minLng / cellSize);
+                            var cxMax = Math.floor(maxLng / cellSize);
+                            var cyMin = Math.floor(minLat / cellSize);
+                            var cyMax = Math.floor(maxLat / cellSize);
+                            for (var gx = cxMin; gx <= cxMax; gx++) {
+                                for (var gy = cyMin; gy <= cyMax; gy++) {
+                                    var gkey = gx + ',' + gy;
+                                    if (!segGrid[gkey]) segGrid[gkey] = [];
+                                    segGrid[gkey].push(segIdx);
+                                }
                             }
                         }
-                    }
+                    });
                 });
-            });
+            }
+            // Index Annesso D segments
+            indexFeaturesSegments(features, 0);
+            // Also index Strade Provinciali and Extraurbane (use offsets so featureIdx never matches Annesso D endpoints)
+            var provFeats = (typeof json_StradeProvinciali !== 'undefined' && json_StradeProvinciali) ? json_StradeProvinciali.features || [] : [];
+            var extraFeats = (typeof dataExtraurbane !== 'undefined' && dataExtraurbane) ? dataExtraurbane.features || [] : [];
+            indexFeaturesSegments(provFeats, -100000);
+            indexFeaturesSegments(extraFeats, -200000);
 
             // For each endpoint, check if any segment of a DIFFERENT link is within SNAP
             var disconnectedPoints = [];
@@ -4472,6 +4508,9 @@
                     fillOpacity: 0.9,
                     weight: 2
                 });
+                marker._discStrada = ep.name || '';
+                marker._discWhich = ep.which;
+                marker._discFeatureIdx = ep.featureIdx;
                 var markerId = L.stamp(marker);
                 var html = '<div class="popup-title">Endpoint disconnesso</div>';
                 html += '<span class="popup-layer-badge" style="background:#c0392b;">Gap rete</span>';
@@ -4516,6 +4555,236 @@
             layerDisconnessioni.clearLayers();
             if (document.getElementById('toggle-disconnessioni').checked) {
                 computeDisconnessioni();
+            }
+        });
+
+        // =====================================================
+        // DISCONNESSIONI CLASSIFICAZIONE (Grafo 2026)
+        // Blue markers where adjacent roads have incompatible
+        // classification classes per the hierarchy rules.
+        // Operates on Grafo 2026 (reflects proposte edits).
+        // =====================================================
+        var layerDiscClassificazione = L.layerGroup();
+        var discClassComputed = false;
+        var resolvedDiscClass = JSON.parse(localStorage.getItem('pgtu_resolved_disc_class') || '[]');
+
+        // Allowed adjacency rules
+        var allowedAdjacency = {
+            'A':  ['A', 'S'],
+            'S':  ['A', 'S', 'IQ'],
+            'IQ': ['S', 'IQ', 'Q'],
+            'Q':  ['IQ', 'Q', 'IZ'],
+            'IZ': ['Q', 'IZ']
+        };
+
+        function dcKey(ep) {
+            return ep.lng.toFixed(6) + '|' + ep.lat.toFixed(6) + '|' + ep.featureIdx + '|' + ep.which;
+        }
+
+        function updateDiscClassCount() {
+            var count = layerDiscClassificazione.getLayers().length;
+            document.getElementById('disc-class-count').textContent = '(' + count + ' punti)';
+        }
+
+        function computeDiscClassificazione() {
+            discClassComputed = true;
+            layerDiscClassificazione.clearLayers();
+
+            // Use Grafo 2026 features (reflects proposte)
+            var grafoFeatures = loadGrafo();
+            if (!grafoFeatures) {
+                grafoFeatures = buildInitialGrafo();
+                saveGrafo(grafoFeatures);
+            }
+            if (!grafoFeatures || grafoFeatures.length === 0) return;
+
+            var SNAP = 0.000225;
+            var cellSize = SNAP * 2;
+
+            // Extract endpoints with classification
+            var endpoints = [];
+            grafoFeatures.forEach(function(f, idx) {
+                if (!f.geometry) return;
+                var classifica = (f.classifica || '').toUpperCase();
+                // Skip features without a classification in the hierarchy
+                if (!allowedAdjacency[classifica]) return;
+                var coords = f.geometry.coordinates;
+                var geomType = f.geometry.type;
+                var lines = [];
+                if (geomType === 'LineString') {
+                    lines.push(coords);
+                } else if (geomType === 'MultiLineString') {
+                    lines = coords;
+                }
+                lines.forEach(function(line) {
+                    if (!line || line.length < 2) return;
+                    var first = line[0];
+                    var last = line[line.length - 1];
+                    endpoints.push({
+                        lng: first[0], lat: first[1],
+                        featureIdx: idx, which: 'start',
+                        classifica: classifica,
+                        name: f.name || ''
+                    });
+                    endpoints.push({
+                        lng: last[0], lat: last[1],
+                        featureIdx: idx, which: 'end',
+                        classifica: classifica,
+                        name: f.name || ''
+                    });
+                });
+            });
+
+            // Build segment grid with classification info
+            var segGrid = {};
+            var allSegs = [];
+            function dcCellKey(lng, lat) {
+                return Math.floor(lng / cellSize) + ',' + Math.floor(lat / cellSize);
+            }
+            grafoFeatures.forEach(function(f, idx) {
+                if (!f.geometry) return;
+                var classifica = (f.classifica || '').toUpperCase();
+                if (!allowedAdjacency[classifica]) return;
+                var coords = f.geometry.coordinates;
+                var geomType = f.geometry.type;
+                var lines = [];
+                if (geomType === 'LineString') {
+                    lines.push(coords);
+                } else if (geomType === 'MultiLineString') {
+                    lines = coords;
+                }
+                lines.forEach(function(line) {
+                    if (!line || line.length < 2) return;
+                    for (var k = 0; k < line.length - 1; k++) {
+                        var segIdx = allSegs.length;
+                        allSegs.push({
+                            featureIdx: idx,
+                            classifica: classifica,
+                            name: f.name || '',
+                            ax: line[k][0], ay: line[k][1],
+                            bx: line[k + 1][0], by: line[k + 1][1]
+                        });
+                        var minLng = Math.min(line[k][0], line[k + 1][0]) - SNAP;
+                        var maxLng = Math.max(line[k][0], line[k + 1][0]) + SNAP;
+                        var minLat = Math.min(line[k][1], line[k + 1][1]) - SNAP;
+                        var maxLat = Math.max(line[k][1], line[k + 1][1]) + SNAP;
+                        var cxMin = Math.floor(minLng / cellSize);
+                        var cxMax = Math.floor(maxLng / cellSize);
+                        var cyMin = Math.floor(minLat / cellSize);
+                        var cyMax = Math.floor(maxLat / cellSize);
+                        for (var gx = cxMin; gx <= cxMax; gx++) {
+                            for (var gy = cyMin; gy <= cyMax; gy++) {
+                                var gkey = gx + ',' + gy;
+                                if (!segGrid[gkey]) segGrid[gkey] = [];
+                                segGrid[gkey].push(segIdx);
+                            }
+                        }
+                    }
+                });
+            });
+
+            // For each endpoint, find all touching segments from OTHER features
+            // and check if any has an incompatible classification
+            var violations = [];
+            endpoints.forEach(function(ep) {
+                var cx = Math.floor(ep.lng / cellSize);
+                var cy = Math.floor(ep.lat / cellSize);
+                var key = cx + ',' + cy;
+                var bucket = segGrid[key];
+                if (!bucket) return;
+                var allowed = allowedAdjacency[ep.classifica];
+                var worstViolation = null;
+                for (var j = 0; j < bucket.length; j++) {
+                    var seg = allSegs[bucket[j]];
+                    if (seg.featureIdx === ep.featureIdx) continue;
+                    var dist = pointToSegmentDist(ep.lng, ep.lat, seg.ax, seg.ay, seg.bx, seg.by);
+                    if (dist <= SNAP) {
+                        if (allowed.indexOf(seg.classifica) === -1) {
+                            worstViolation = seg;
+                            break;
+                        }
+                    }
+                }
+                if (worstViolation) {
+                    violations.push({
+                        lng: ep.lng, lat: ep.lat,
+                        featureIdx: ep.featureIdx, which: ep.which,
+                        name: ep.name,
+                        classifica: ep.classifica,
+                        adjClassifica: worstViolation.classifica,
+                        adjName: worstViolation.name
+                    });
+                }
+            });
+
+            // Deduplicate by location (multiple endpoints at same spot)
+            var seen = {};
+            violations.forEach(function(v) {
+                var locKey = v.lng.toFixed(5) + '|' + v.lat.toFixed(5);
+                if (seen[locKey]) return;
+                seen[locKey] = true;
+
+                var vkey = dcKey(v);
+                if (resolvedDiscClass.indexOf(vkey) !== -1) return;
+
+                var classificaNames = { 'A': 'Autostrade', 'S': 'Scorrimento', 'IQ': 'Interquartiere', 'Q': 'Quartiere', 'IZ': 'Interzonali', 'EX': 'Extraurbana' };
+                var marker = L.circleMarker([v.lat, v.lng], {
+                    radius: 6,
+                    color: '#0d47a1',
+                    fillColor: '#1565c0',
+                    fillOpacity: 0.9,
+                    weight: 2
+                });
+                marker._dcStrada = v.name;
+                marker._dcClassifica = v.classifica;
+                marker._dcAdiacente = v.adjClassifica;
+                marker._dcWhich = v.which;
+                var markerId = L.stamp(marker);
+                var html = '<div class="popup-title">Discontinuit&agrave; classificazione</div>';
+                html += '<span class="popup-layer-badge" style="background:#1565c0;">Classe incompatibile</span>';
+                html += '<table class="popup-table">';
+                html += popupRow('Strada', v.name || '(senza nome)');
+                html += popupRow('Classe', (classificaNames[v.classifica] || v.classifica) + ' (' + v.classifica + ')');
+                html += popupRow('Tocca', (v.adjName || '(senza nome)') + ' - ' + (classificaNames[v.adjClassifica] || v.adjClassifica) + ' (' + v.adjClassifica + ')');
+                html += popupRow('Estremo', v.which === 'start' ? 'Inizio arco' : 'Fine arco');
+                html += popupRow('Coordinate', v.lat.toFixed(6) + ', ' + v.lng.toFixed(6));
+                html += '</table>';
+                html += '<button onclick="resolveDiscClass(\'' + vkey.replace(/'/g, "\\'") + '\',' + markerId + ')" style="margin-top:8px;padding:4px 12px;background:#1565c0;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Risolto &#10003;</button>';
+                marker.bindPopup(html, { maxWidth: 320 });
+                layerDiscClassificazione.addLayer(marker);
+            });
+
+            updateDiscClassCount();
+        }
+
+        window.resolveDiscClass = function(key, markerId) {
+            resolvedDiscClass.push(key);
+            localStorage.setItem('pgtu_resolved_disc_class', JSON.stringify(resolvedDiscClass));
+            layerDiscClassificazione.eachLayer(function(layer) {
+                if (L.stamp(layer) === markerId) {
+                    layerDiscClassificazione.removeLayer(layer);
+                }
+            });
+            updateDiscClassCount();
+        };
+
+        document.getElementById('toggle-disc-classificazione').addEventListener('change', function() {
+            if (this.checked) {
+                computeDiscClassificazione();
+                map.addLayer(layerDiscClassificazione);
+                layerDiscClassificazione.bringToFront();
+            } else {
+                map.removeLayer(layerDiscClassificazione);
+            }
+        });
+
+        document.getElementById('btn-reset-disc-class').addEventListener('click', function() {
+            resolvedDiscClass = [];
+            localStorage.removeItem('pgtu_resolved_disc_class');
+            discClassComputed = false;
+            layerDiscClassificazione.clearLayers();
+            if (document.getElementById('toggle-disc-classificazione').checked) {
+                computeDiscClassificazione();
             }
         });
 
@@ -4614,6 +4883,40 @@
                         };
                     });
                     return makeGeoJSON('Proposte', pFeatures);
+                case 'tpl5-no-pgtu':
+                    var tplNoPgtuFeats = [];
+                    layerTPL5noPGTU.eachLayer(function(l) {
+                        if (l.feature) tplNoPgtuFeats.push(l.feature);
+                        else if (l.toGeoJSON) tplNoPgtuFeats.push(l.toGeoJSON());
+                    });
+                    return makeGeoJSON('TPL5_non_in_AnnessoD', tplNoPgtuFeats);
+                case 'pgtu-no-tpl5':
+                    var pgtuNoTplFeats = [];
+                    layerPGTUnoTPL5.eachLayer(function(l) {
+                        if (l.feature) pgtuNoTplFeats.push(l.feature);
+                        else if (l.toGeoJSON) pgtuNoTplFeats.push(l.toGeoJSON());
+                    });
+                    return makeGeoJSON('AnnessoD_non_in_TPL5', pgtuNoTplFeats);
+                case 'disconnessioni':
+                    var discFeats = [];
+                    layerDisconnessioni.eachLayer(function(l) {
+                        discFeats.push({
+                            type: 'Feature',
+                            properties: { strada: l._discStrada || '', estremo: l._discWhich || '', featureIdx: l._discFeatureIdx || 0 },
+                            geometry: { type: 'Point', coordinates: [l.getLatLng().lng, l.getLatLng().lat] }
+                        });
+                    });
+                    return makeGeoJSON('Disconnessioni_Grafo', discFeats);
+                case 'disc-classificazione':
+                    var dcFeats = [];
+                    layerDiscClassificazione.eachLayer(function(l) {
+                        dcFeats.push({
+                            type: 'Feature',
+                            properties: { strada: l._dcStrada || '', classificazione: l._dcClassifica || '', classe_adiacente: l._dcAdiacente || '', estremo: l._dcWhich || '' },
+                            geometry: { type: 'Point', coordinates: [l.getLatLng().lng, l.getLatLng().lat] }
+                        });
+                    });
+                    return makeGeoJSON('Disconnessioni_Classificazione', dcFeats);
                 default:
                     return null;
             }
@@ -4651,7 +4954,7 @@
             // Load JSZip if not already loaded
             function doZipExport() {
                 var zip = new JSZip();
-                var allKeys = ['municipi', 'annesso-d', 'grafo-2026', 'strade-prov', 'extraurbane', 'flussi-bassi', 'flussi-elevati', 'linee-atac', 'rete-tpl-3', 'rete-tpl-5', 'proposte'];
+                var allKeys = ['municipi', 'annesso-d', 'grafo-2026', 'strade-prov', 'extraurbane', 'flussi-bassi', 'flussi-elevati', 'linee-atac', 'rete-tpl-3', 'rete-tpl-5', 'proposte', 'tpl5-no-pgtu', 'pgtu-no-tpl5', 'disconnessioni', 'disc-classificazione'];
                 var count = 0;
                 allKeys.forEach(function(key) {
                     var geojson = getLayerGeoJSON(key);
