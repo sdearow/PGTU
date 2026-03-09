@@ -805,6 +805,12 @@
                     <span id="disc-class-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
                     <button id="btn-reset-disc-class" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
                 </div>
+                <div class="layer-toggle" style="margin-top:4px;">
+                    <input type="checkbox" id="toggle-disc-estrema">
+                    <label for="toggle-disc-estrema" style="font-weight:600;color:#b71c1c;">&#9679; Discontinuit&agrave; Estreme</label>
+                    <span id="disc-estrema-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
+                    <button id="btn-reset-disc-estrema" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
+                </div>
             </div>
 
             <div class="control-section">
@@ -1709,6 +1715,13 @@
                     disconnessioniComputed = false;
                     if (document.getElementById('toggle-disconnessioni').checked) {
                         computeDisconnessioni();
+                    }
+                }
+                // Recompute extreme disconnections if active
+                if (typeof discEstremaComputed !== 'undefined') {
+                    discEstremaComputed = false;
+                    if (document.getElementById('toggle-disc-estrema') && document.getElementById('toggle-disc-estrema').checked) {
+                        computeDiscEstrema();
                     }
                 }
             }
@@ -4964,6 +4977,195 @@
             layerDiscClassificazione.clearLayers();
             if (document.getElementById('toggle-disc-classificazione').checked) {
                 computeDiscClassificazione();
+            }
+        });
+
+        // =====================================================
+        // DISCONTINUITA' ESTREME
+        // Flags junctions where classifications skip 2+ hierarchy levels
+        // Hierarchy: A(0) > S(1) > IQ(2) > Q(3) > IZ(4)
+        // =====================================================
+        var layerDiscEstrema = L.layerGroup();
+        var discEstremaComputed = false;
+        var resolvedDiscEstrema = JSON.parse(localStorage.getItem('pgtu_resolved_disc_estrema') || '[]');
+
+        var classHierarchy = { 'A': 0, 'S': 1, 'IQ': 2, 'Q': 3, 'IZ': 4 };
+
+        function deKey(ep) {
+            return ep.lng.toFixed(6) + '|' + ep.lat.toFixed(6) + '|' + ep.featureIdx + '|' + ep.which;
+        }
+
+        function updateDiscEstremaCount() {
+            var count = layerDiscEstrema.getLayers().length;
+            document.getElementById('disc-estrema-count').textContent = '(' + count + ' punti)';
+        }
+
+        function computeDiscEstrema() {
+            discEstremaComputed = true;
+            layerDiscEstrema.clearLayers();
+
+            var grafoFeatures = loadGrafo();
+            if (!grafoFeatures) {
+                grafoFeatures = buildInitialGrafo();
+                saveGrafo(grafoFeatures);
+            }
+            if (!grafoFeatures || grafoFeatures.length === 0) return;
+
+            var SNAP = 0.000225;
+            var cellSize = SNAP * 2;
+
+            // Extract endpoints with classification
+            var endpoints = [];
+            grafoFeatures.forEach(function(f, idx) {
+                if (!f.geometry) return;
+                var classifica = (f.classifica || '').toUpperCase();
+                if (classHierarchy[classifica] === undefined) return;
+                var lines = [];
+                if (f.geometry.type === 'LineString') lines.push(f.geometry.coordinates);
+                else if (f.geometry.type === 'MultiLineString') lines = f.geometry.coordinates;
+                lines.forEach(function(line) {
+                    if (!line || line.length < 2) return;
+                    endpoints.push({ lng: line[0][0], lat: line[0][1], featureIdx: idx, which: 'start', classifica: classifica, name: f.name || '' });
+                    endpoints.push({ lng: line[line.length-1][0], lat: line[line.length-1][1], featureIdx: idx, which: 'end', classifica: classifica, name: f.name || '' });
+                });
+            });
+
+            // Build segment grid
+            var segGrid = {};
+            var allSegs = [];
+            function deCellKey(lng, lat) { return Math.floor(lng / cellSize) + ',' + Math.floor(lat / cellSize); }
+            grafoFeatures.forEach(function(f, idx) {
+                if (!f.geometry) return;
+                var classifica = (f.classifica || '').toUpperCase();
+                if (classHierarchy[classifica] === undefined) return;
+                var lines = [];
+                if (f.geometry.type === 'LineString') lines.push(f.geometry.coordinates);
+                else if (f.geometry.type === 'MultiLineString') lines = f.geometry.coordinates;
+                lines.forEach(function(line) {
+                    if (!line || line.length < 2) return;
+                    for (var k = 0; k < line.length - 1; k++) {
+                        var segIdx = allSegs.length;
+                        allSegs.push({ featureIdx: idx, classifica: classifica, name: f.name || '', ax: line[k][0], ay: line[k][1], bx: line[k+1][0], by: line[k+1][1] });
+                        var minLng = Math.min(line[k][0], line[k+1][0]) - SNAP;
+                        var maxLng = Math.max(line[k][0], line[k+1][0]) + SNAP;
+                        var minLat = Math.min(line[k][1], line[k+1][1]) - SNAP;
+                        var maxLat = Math.max(line[k][1], line[k+1][1]) + SNAP;
+                        for (var gx = Math.floor(minLng/cellSize); gx <= Math.floor(maxLng/cellSize); gx++) {
+                            for (var gy = Math.floor(minLat/cellSize); gy <= Math.floor(maxLat/cellSize); gy++) {
+                                var gkey = gx + ',' + gy;
+                                if (!segGrid[gkey]) segGrid[gkey] = [];
+                                segGrid[gkey].push(segIdx);
+                            }
+                        }
+                    }
+                });
+            });
+
+            // Find extreme violations: hierarchy gap >= 2
+            var violations = [];
+            endpoints.forEach(function(ep) {
+                var cx = Math.floor(ep.lng / cellSize);
+                var cy = Math.floor(ep.lat / cellSize);
+                var bucket = segGrid[cx + ',' + cy];
+                if (!bucket) return;
+                var worstGap = 0;
+                var worstSeg = null;
+                for (var j = 0; j < bucket.length; j++) {
+                    var seg = allSegs[bucket[j]];
+                    if (seg.featureIdx === ep.featureIdx) continue;
+                    var dist = pointToSegmentDist(ep.lng, ep.lat, seg.ax, seg.ay, seg.bx, seg.by);
+                    if (dist <= SNAP) {
+                        var gap = Math.abs(classHierarchy[ep.classifica] - classHierarchy[seg.classifica]);
+                        if (gap >= 2 && gap > worstGap) {
+                            worstGap = gap;
+                            worstSeg = seg;
+                        }
+                    }
+                }
+                if (worstSeg) {
+                    violations.push({
+                        lng: ep.lng, lat: ep.lat,
+                        featureIdx: ep.featureIdx, which: ep.which,
+                        name: ep.name,
+                        classifica: ep.classifica,
+                        adjClassifica: worstSeg.classifica,
+                        adjName: worstSeg.name,
+                        gap: worstGap
+                    });
+                }
+            });
+
+            // Deduplicate by location
+            var seen = {};
+            var classificaNames = { 'A': 'Autostrade', 'S': 'Scorrimento', 'IQ': 'Interquartiere', 'Q': 'Quartiere', 'IZ': 'Interzonali', 'EX': 'Extraurbana' };
+            violations.forEach(function(v) {
+                var locKey = v.lng.toFixed(5) + '|' + v.lat.toFixed(5);
+                if (seen[locKey]) return;
+                seen[locKey] = true;
+
+                var vkey = deKey(v);
+                if (resolvedDiscEstrema.indexOf(vkey) !== -1) return;
+
+                // Larger markers for bigger gaps
+                var radius = v.gap >= 3 ? 10 : 8;
+                var marker = L.circleMarker([v.lat, v.lng], {
+                    radius: radius,
+                    color: '#b71c1c',
+                    fillColor: '#d32f2f',
+                    fillOpacity: 0.95,
+                    weight: 3
+                });
+                marker._deStrada = v.name;
+                marker._deClassifica = v.classifica;
+                marker._deAdiacente = v.adjClassifica;
+                marker._deWhich = v.which;
+                var markerId = L.stamp(marker);
+                var html = '<div class="popup-title" style="color:#b71c1c;">Discontinuit&agrave; Estrema (salto ' + v.gap + ' livelli)</div>';
+                html += '<span class="popup-layer-badge" style="background:#d32f2f;">Classe incompatibile grave</span>';
+                html += '<table class="popup-table">';
+                html += popupRow('Strada', v.name || '(senza nome)');
+                html += popupRow('Classe', (classificaNames[v.classifica] || v.classifica) + ' (' + v.classifica + ')');
+                html += popupRow('Tocca', (v.adjName || '(senza nome)') + ' - ' + (classificaNames[v.adjClassifica] || v.adjClassifica) + ' (' + v.adjClassifica + ')');
+                html += popupRow('Salto', v.gap + ' livelli nella gerarchia');
+                html += popupRow('Estremo', v.which === 'start' ? 'Inizio arco' : 'Fine arco');
+                html += popupRow('Coordinate', v.lat.toFixed(6) + ', ' + v.lng.toFixed(6));
+                html += '</table>';
+                html += '<button onclick="resolveDiscEstrema(\'' + vkey.replace(/'/g, "\\'") + '\',' + markerId + ')" style="margin-top:8px;padding:4px 12px;background:#b71c1c;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px;">Risolto &#10003;</button>';
+                marker.bindPopup(html, { maxWidth: 320 });
+                layerDiscEstrema.addLayer(marker);
+            });
+
+            updateDiscEstremaCount();
+        }
+
+        window.resolveDiscEstrema = function(key, markerId) {
+            resolvedDiscEstrema.push(key);
+            localStorage.setItem('pgtu_resolved_disc_estrema', JSON.stringify(resolvedDiscEstrema));
+            layerDiscEstrema.eachLayer(function(layer) {
+                if (L.stamp(layer) === markerId) {
+                    layerDiscEstrema.removeLayer(layer);
+                }
+            });
+            updateDiscEstremaCount();
+        };
+
+        document.getElementById('toggle-disc-estrema').addEventListener('change', function() {
+            if (this.checked) {
+                computeDiscEstrema();
+                map.addLayer(layerDiscEstrema);
+                layerDiscEstrema.bringToFront();
+            } else {
+                map.removeLayer(layerDiscEstrema);
+            }
+        });
+
+        document.getElementById('btn-reset-disc-estrema').addEventListener('click', function() {
+            resolvedDiscEstrema = [];
+            localStorage.removeItem('pgtu_resolved_disc_estrema');
+            discEstremaComputed = false;
+            layerDiscEstrema.clearLayers();
+            if (document.getElementById('toggle-disc-estrema').checked) {
+                computeDiscEstrema();
             }
         });
 
