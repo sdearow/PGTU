@@ -1100,7 +1100,7 @@
             maxZoom: 20
         }).addTo(map);
         // Make base tiles grayscale so layers stand out
-        document.querySelector('.leaflet-tile-pane').style.filter = 'saturate(0) brightness(1.05)';
+        document.querySelector('.leaflet-tile-pane').style.filter = 'saturate(0) brightness(0.85)';
 
         // Custom pane for background layers (above tiles at 200, below overlays at 400)
         map.createPane('backgroundPane');
