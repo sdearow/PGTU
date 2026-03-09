@@ -1100,13 +1100,10 @@
             wheelDebounceTime: 80
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-            subdomains: 'abcd',
+        L.tileLayer('https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://stamen.com">Stamen Design</a> &copy; <a href="https://openmaptiles.org">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
             maxZoom: 20
         }).addTo(map);
-        // Make base tiles grayscale so layers stand out
-        document.querySelector('.leaflet-tile-pane').style.filter = 'saturate(0) brightness(0.85)';
 
         // Custom pane for background layers (above tiles at 200, below overlays at 400)
         map.createPane('backgroundPane');
@@ -5061,7 +5058,7 @@
                 });
             });
 
-            // Find extreme violations: hierarchy gap >= 2
+            // Find extreme violations: hierarchy gap >= 3
             var violations = [];
             endpoints.forEach(function(ep) {
                 var cx = Math.floor(ep.lng / cellSize);
@@ -5076,7 +5073,7 @@
                     var dist = pointToSegmentDist(ep.lng, ep.lat, seg.ax, seg.ay, seg.bx, seg.by);
                     if (dist <= SNAP) {
                         var gap = Math.abs(classHierarchy[ep.classifica] - classHierarchy[seg.classifica]);
-                        if (gap >= 2 && gap > worstGap) {
+                        if (gap >= 3 && gap > worstGap) {
                             worstGap = gap;
                             worstSeg = seg;
                         }
