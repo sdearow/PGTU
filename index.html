@@ -1644,6 +1644,24 @@
             var proposte = loadProposte();
             console.log('renderProposte: ' + proposte.length + ' proposte loaded');
 
+            // Fix names for drawn lines: extract street name from notes
+            var namesFixed = false;
+            proposte.forEach(function(p) {
+                if (!p.name || !/^Linea\s+(Eliminazione|Inserimento)\s+\(disegnata\)$/i.test(p.name)) return;
+                if (!p.notes || !p.notes.trim()) return;
+                var noteText = p.notes.trim();
+                var parenIdx = noteText.indexOf('(');
+                if (parenIdx > 0) {
+                    p.name = noteText.substring(0, parenIdx).trim();
+                    p.notes = noteText.substring(parenIdx).trim();
+                } else {
+                    p.name = noteText;
+                    p.notes = '';
+                }
+                namesFixed = true;
+            });
+            if (namesFixed) saveProposte(proposte);
+
             // Ensure groups are on map if checkboxes are checked
             var elimCb = document.getElementById('toggle-proposte-elim');
             var insCb = document.getElementById('toggle-proposte-ins');
