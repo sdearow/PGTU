@@ -2566,105 +2566,135 @@
             return merged;
         }
 
-        document.getElementById('btn-report-proposte').addEventListener('click', function() {
-          try {
-            var proposte = loadProposte();
-            if (proposte.length === 0) { alert('Nessuna proposta da includere nel report.'); return; }
-
-            // Resolve municipio for proposte that don't have one via spatial overlay
-            // Build array of municipi polygons for Turf.js point-in-polygon test
+        // ── Shared report data preparation ──
+        // Returns { proposte, grafoByMunicipio, municPolygons, munKeys (all municipio keys) }
+        function prepareReportData() {
+            // Build municipi polygons for spatial overlay
             var municPolygons = [];
             layerMunicipii.eachLayer(function(layer) {
                 try {
                     var feat = layer.feature;
-                    if (feat && feat.geometry) {
-                        municPolygons.push(feat);
-                    }
+                    if (feat && feat.geometry) municPolygons.push(feat);
                 } catch(e) {}
             });
 
-            proposte.forEach(function(p) {
-                if (p.municipio) return;
-                // Compute a representative point for the proposta
+            // Helper: assign municipio to a geometry via spatial overlay
+            function assignMunicipio(geometry) {
+                if (!geometry) return '';
                 var turfPt;
                 try {
-                    if (p.geometry && p.geometry.type === 'Point') {
-                        turfPt = turf.point(p.geometry.coordinates);
-                    } else if (p.geometry && p.geometry.coordinates) {
-                        // For lines/multilines, use the centroid of the geometry
-                        var feat = turf.feature(p.geometry);
+                    if (geometry.type === 'Point') {
+                        turfPt = turf.point(geometry.coordinates);
+                    } else if (geometry.coordinates) {
+                        var feat = turf.feature(geometry);
                         turfPt = turf.centroid(feat);
-                        // If centroid falls outside all polygons (e.g. curved line),
-                        // fall back to midpoint along the line
-                        var centroidInside = false;
+                        var inside = false;
                         for (var ci = 0; ci < municPolygons.length; ci++) {
-                            if (turf.booleanPointInPolygon(turfPt, municPolygons[ci])) {
-                                centroidInside = true;
-                                break;
-                            }
+                            if (turf.booleanPointInPolygon(turfPt, municPolygons[ci])) { inside = true; break; }
                         }
-                        if (!centroidInside) {
-                            turfPt = turf.along(feat, turf.length(feat) / 2);
+                        if (!inside) {
+                            try { turfPt = turf.along(feat, turf.length(feat) / 2); } catch(e2) {}
                         }
                     }
                 } catch(e) { turfPt = null; }
-
-                if (!turfPt) return;
-
-                // Test point-in-polygon against each municipio
+                if (!turfPt) return '';
                 for (var mi = 0; mi < municPolygons.length; mi++) {
                     try {
                         if (turf.booleanPointInPolygon(turfPt, municPolygons[mi])) {
                             var mprops = municPolygons[mi].properties;
-                            p.municipio = String(mprops.Numero || mprops.Attuale || '');
-                            break;
+                            return String(mprops.Numero || mprops.Attuale || '');
                         }
                     } catch(e) {}
                 }
-            });
+                return '';
+            }
 
-            // Fix names for drawn elimination/insertion lines:
-            // If name is "Linea Eliminazione (disegnata)" or "Linea Inserimento (disegnata)",
-            // extract the street name from notes (text before parentheses) and use it as the name.
-            // The parenthetical content stays in the notes.
+            // Prepare proposte
+            var proposte = loadProposte();
+            proposte.forEach(function(p) {
+                if (!p.municipio) p.municipio = assignMunicipio(p.geometry);
+            });
+            // Fix drawn line names
             proposte.forEach(function(p) {
                 if (!p.name || !/^Linea\s+(Eliminazione|Inserimento)\s+\(disegnata\)$/i.test(p.name)) return;
                 if (!p.notes || !p.notes.trim()) return;
                 var noteText = p.notes.trim();
-                // Extract street name: everything before the first parenthesis
                 var parenIdx = noteText.indexOf('(');
-                var streetName;
-                if (parenIdx > 0) {
-                    streetName = noteText.substring(0, parenIdx).trim();
-                    // Keep only the parenthetical content in notes
-                    p.notes = noteText.substring(parenIdx).trim();
-                } else {
-                    // No parentheses - entire note is the street name
-                    streetName = noteText;
-                    p.notes = '';
-                }
-                if (streetName) {
-                    p.name = streetName;
-                }
+                if (parenIdx > 0) { p.name = noteText.substring(0, parenIdx).trim(); p.notes = noteText.substring(parenIdx).trim(); }
+                else { p.name = noteText; p.notes = ''; }
             });
 
-            // Group by municipio (split multi-municipio entries like "7;8" into both)
-            var byMunicipio = {};
+            // Prepare Grafo 2026 features with spatial municipio assignment
+            var grafoFeatures = loadGrafo();
+            if (!grafoFeatures) {
+                grafoFeatures = buildInitialGrafo();
+                saveGrafo(grafoFeatures);
+            }
+            grafoFeatures = grafoFeatures || [];
+
+            // Assign municipio to each grafo feature via spatial overlay
+            grafoFeatures.forEach(function(f) {
+                if (!f.geometry) return;
+                f._reportMunicipio = assignMunicipio(f.geometry);
+            });
+
+            // Group grafo features by municipio
+            var grafoByMunicipio = {};
+            grafoFeatures.forEach(function(f) {
+                if (!f.geometry) return;
+                var mun = f._reportMunicipio || 'ND';
+                // Split multi-municipio
+                var munList = mun ? mun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
+                if (munList.length === 0) munList = ['ND'];
+                munList.forEach(function(m) {
+                    if (!grafoByMunicipio[m]) grafoByMunicipio[m] = [];
+                    grafoByMunicipio[m].push(f);
+                });
+            });
+
+            // Group proposte by municipio
+            var proposteByMunicipio = {};
             proposte.forEach(function(p) {
                 var rawMun = String(p.municipio || '').trim();
                 var munList = rawMun ? rawMun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
                 if (munList.length === 0) munList = ['ND'];
                 munList.forEach(function(mun) {
-                    if (!byMunicipio[mun]) byMunicipio[mun] = [];
-                    byMunicipio[mun].push(p);
+                    if (!proposteByMunicipio[mun]) proposteByMunicipio[mun] = [];
+                    proposteByMunicipio[mun].push(p);
                 });
             });
 
-            var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
-                if (a === 'ND') return 1;
-                if (b === 'ND') return -1;
+            // Collect all municipio keys from both proposte and grafo
+            var allMunKeys = {};
+            Object.keys(proposteByMunicipio).forEach(function(k) { allMunKeys[k] = true; });
+            Object.keys(grafoByMunicipio).forEach(function(k) { allMunKeys[k] = true; });
+            var munKeys = Object.keys(allMunKeys).sort(function(a, b) {
+                if (a === 'ND') return 1; if (b === 'ND') return -1;
                 return parseInt(a) - parseInt(b);
             });
+
+            return {
+                proposte: proposte,
+                proposteByMunicipio: proposteByMunicipio,
+                grafoFeatures: grafoFeatures,
+                grafoByMunicipio: grafoByMunicipio,
+                municPolygons: municPolygons,
+                munKeys: munKeys
+            };
+        }
+
+        // Helper: compute length of a grafo feature in km
+        function grafoFeatureLength(f) {
+            return f.geometry ? calcGeoLength(f.geometry) : 0;
+        }
+
+        document.getElementById('btn-report-proposte').addEventListener('click', function() {
+          try {
+            var rd = prepareReportData();
+            var proposte = rd.proposte;
+            var byMunicipio = rd.proposteByMunicipio;
+            var grafoByMunicipio = rd.grafoByMunicipio;
+            var munKeys = rd.munKeys;
 
             var now = new Date();
             var dateStr = now.toLocaleDateString('it-IT', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -2960,6 +2990,68 @@
                 h += '</div>';
             });
 
+            // ── Grafo 2026 section: complete list of arcs by municipio ──
+            h += '<div class="mun-section" style="page-break-before:always;">';
+            h += '<div class="mun-header" style="background:#1a252f;"><h2>PGTU - Grafo 2026: Elenco Completo Archi</h2></div>';
+            h += '<div class="sub-section">';
+            h += '<p style="font-size:12px;color:#666;">Elenco completo degli archi presenti nel Grafo 2026, suddivisi per municipio con assegnazione tramite sovrapposizione spaziale.</p>';
+            h += '</div></div>';
+
+            munKeys.forEach(function(munNum) {
+                var grafoItems = grafoByMunicipio[munNum] || [];
+                if (grafoItems.length === 0) return;
+                var munLabel = getMunLabel(munNum);
+
+                // Sort by classification then name
+                grafoItems.sort(function(a, b) {
+                    var ca = (a.classifica || '').toUpperCase();
+                    var cb = (b.classifica || '').toUpperCase();
+                    if (ca !== cb) return ca < cb ? -1 : 1;
+                    var na = (a.name || '').toLowerCase();
+                    var nb = (b.name || '').toLowerCase();
+                    return na < nb ? -1 : (na > nb ? 1 : 0);
+                });
+
+                // Compute stats
+                var totalKm = 0;
+                var byClass = {};
+                grafoItems.forEach(function(f) {
+                    var km = grafoFeatureLength(f);
+                    totalKm += km;
+                    var cl = (f.classifica || 'N/D').toUpperCase();
+                    if (!byClass[cl]) byClass[cl] = { count: 0, km: 0 };
+                    byClass[cl].count++;
+                    byClass[cl].km += km;
+                });
+
+                h += '<div class="mun-section">';
+                h += '<div class="mun-header" style="background:#34495e;"><h2>' + munLabel + ' &mdash; Grafo 2026</h2>';
+                h += '<div class="mun-counts"><span style="background:rgba(255,255,255,0.2);">' + grafoItems.length + ' archi &middot; ' + totalKm.toFixed(2) + ' km</span></div>';
+                h += '</div>';
+
+                h += '<div class="sub-section">';
+                h += '<h3 style="font-size:13px;color:#34495e;border-bottom:2px solid #34495e;">Archi Stradali (' + grafoItems.length + ')</h3>';
+                h += '<table class="prop-table">';
+                h += '<tr><th>#</th><th>Nome Strada</th><th>Classificazione</th><th>Km</th><th>Municipio</th><th>Note</th></tr>';
+                grafoItems.forEach(function(f, idx) {
+                    var cfCode = (f.classifica || '').toUpperCase();
+                    var cfLabel = classificaNames[cfCode] ? classificaNames[cfCode] + ' (' + cfCode + ')' : (cfCode || '&mdash;');
+                    var km = grafoFeatureLength(f);
+                    var name = f.name || '(senza nome)';
+                    var note = f.note || '';
+                    h += '<tr>';
+                    h += '<td>' + (idx + 1) + '</td>';
+                    h += '<td><strong>' + name + '</strong></td>';
+                    h += '<td>' + cfLabel + '</td>';
+                    h += '<td>' + (km > 0 ? km.toFixed(2) : '&mdash;') + '</td>';
+                    h += '<td>' + formatMunicipiLabel(munNum) + '</td>';
+                    h += '<td>' + (note ? '<div class="notes-box">' + note.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>' : '') + '</td>';
+                    h += '</tr>';
+                });
+                h += '</table>';
+                h += '</div></div>';
+            });
+
             h += '<div class="footer">Report generato automaticamente da PGTU Roma - Mappa Interattiva</div>';
             h += '</div>';
             h += '<script>';
@@ -2996,70 +3088,11 @@
         // ── Word Report Export ──
         document.getElementById('btn-report-word').addEventListener('click', function() {
           try {
-            var proposte = loadProposte();
-            if (proposte.length === 0) { alert('Nessuna proposta da includere nel report.'); return; }
-
-            // Resolve municipio via spatial overlay (same logic as HTML report)
-            var municPolygons = [];
-            layerMunicipii.eachLayer(function(layer) {
-                try {
-                    var feat = layer.feature;
-                    if (feat && feat.geometry) municPolygons.push(feat);
-                } catch(e) {}
-            });
-            proposte.forEach(function(p) {
-                if (p.municipio) return;
-                var turfPt;
-                try {
-                    if (p.geometry && p.geometry.type === 'Point') {
-                        turfPt = turf.point(p.geometry.coordinates);
-                    } else if (p.geometry && p.geometry.coordinates) {
-                        var feat = turf.feature(p.geometry);
-                        turfPt = turf.centroid(feat);
-                        var inside = false;
-                        for (var ci = 0; ci < municPolygons.length; ci++) {
-                            if (turf.booleanPointInPolygon(turfPt, municPolygons[ci])) { inside = true; break; }
-                        }
-                        if (!inside) turfPt = turf.along(feat, turf.length(feat) / 2);
-                    }
-                } catch(e) { turfPt = null; }
-                if (!turfPt) return;
-                for (var mi = 0; mi < municPolygons.length; mi++) {
-                    try {
-                        if (turf.booleanPointInPolygon(turfPt, municPolygons[mi])) {
-                            var mprops = municPolygons[mi].properties;
-                            p.municipio = String(mprops.Numero || mprops.Attuale || '');
-                            break;
-                        }
-                    } catch(e) {}
-                }
-            });
-
-            // Fix drawn line names (same as HTML report)
-            proposte.forEach(function(p) {
-                if (!p.name || !/^Linea\s+(Eliminazione|Inserimento)\s+\(disegnata\)$/i.test(p.name)) return;
-                if (!p.notes || !p.notes.trim()) return;
-                var noteText = p.notes.trim();
-                var parenIdx = noteText.indexOf('(');
-                if (parenIdx > 0) { p.name = noteText.substring(0, parenIdx).trim(); p.notes = noteText.substring(parenIdx).trim(); }
-                else { p.name = noteText; p.notes = ''; }
-            });
-
-            // Group by municipio
-            var byMunicipio = {};
-            proposte.forEach(function(p) {
-                var rawMun = String(p.municipio || '').trim();
-                var munList = rawMun ? rawMun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
-                if (munList.length === 0) munList = ['ND'];
-                munList.forEach(function(mun) {
-                    if (!byMunicipio[mun]) byMunicipio[mun] = [];
-                    byMunicipio[mun].push(p);
-                });
-            });
-            var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
-                if (a === 'ND') return 1; if (b === 'ND') return -1;
-                return parseInt(a) - parseInt(b);
-            });
+            var rd = prepareReportData();
+            var proposte = rd.proposte;
+            var byMunicipio = rd.proposteByMunicipio;
+            var grafoByMunicipio = rd.grafoByMunicipio;
+            var munKeys = rd.munKeys;
 
             // Helper: get item notes as text
             function getItemNotes(item) {
@@ -3068,19 +3101,13 @@
                 }
                 return (item.data.notes || '').trim();
             }
-
-            // Helper: get item name
             function getItemName(item) {
                 return (item.kind === 'road' ? item.data.name : item.data.name) || 'N/D';
             }
-
-            // Helper: get classification label
             function getItemCf(item) {
                 var cf = item.kind === 'road' ? item.data.classificazione : item.data.classificazione;
                 return cf ? (classificaNames[cf] || cf) : '';
             }
-
-            // Helper: get km
             function getItemKm(item) {
                 if (item.kind === 'road') return item.data.lunghezza > 0 ? item.data.lunghezza.toFixed(2) : '';
                 var len = item.data.lunghezza || calcGeoLength(item.data.geometry);
@@ -3100,6 +3127,7 @@
             w += 'h3 { font-size: 12pt; margin-top: 12pt; margin-bottom: 6pt; }';
             w += 'h3.elim { color: #c0392b; }';
             w += 'h3.ins { color: #006400; }';
+            w += 'h3.grafo { color: #34495e; }';
             w += 'table { border-collapse: collapse; width: 100%; font-size: 10pt; margin-bottom: 12pt; }';
             w += 'th { background: #f0f0f0; text-align: left; padding: 5pt 8pt; border: 1pt solid #bbb; font-weight: bold; font-size: 9pt; }';
             w += 'td { padding: 4pt 8pt; border: 1pt solid #ddd; vertical-align: top; }';
@@ -3112,14 +3140,16 @@
             w += '<p>Piano Generale del Traffico Urbano &ndash; Roma Capitale</p>';
             w += '<p style="font-size:9pt;color:#888;">Generato il ' + now.toLocaleDateString('it-IT') + ' alle ' + now.toLocaleTimeString('it-IT', {hour:'2-digit',minute:'2-digit'}) + '</p>';
 
-            // Per-municipio sections
+            // Per-municipio proposte sections
             munKeys.forEach(function(munNum) {
-                var items = byMunicipio[munNum];
+                var items = byMunicipio[munNum] || [];
                 var munLabel = getMunLabel(munNum);
                 var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
                 var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
                 var mergedElim = mergeProposte(munElim);
                 var mergedIns = mergeProposte(munIns);
+
+                if (mergedElim.length === 0 && mergedIns.length === 0) return;
 
                 w += '<h2>' + munLabel + '</h2>';
 
@@ -3145,6 +3175,48 @@
                 if (mergedIns.length > 0) w += buildWordTable(mergedIns, 'Inserimento');
             });
 
+            // Grafo 2026 section
+            w += '<h1 style="margin-top:40pt;">PGTU &ndash; Grafo 2026: Elenco Completo Archi</h1>';
+            w += '<p style="font-size:9pt;color:#666;">Elenco completo degli archi presenti nel Grafo 2026, suddivisi per municipio con assegnazione tramite sovrapposizione spaziale.</p>';
+
+            munKeys.forEach(function(munNum) {
+                var grafoItems = grafoByMunicipio[munNum] || [];
+                if (grafoItems.length === 0) return;
+                var munLabel = getMunLabel(munNum);
+
+                grafoItems.sort(function(a, b) {
+                    var ca = (a.classifica || '').toUpperCase();
+                    var cb = (b.classifica || '').toUpperCase();
+                    if (ca !== cb) return ca < cb ? -1 : 1;
+                    var na = (a.name || '').toLowerCase();
+                    var nb = (b.name || '').toLowerCase();
+                    return na < nb ? -1 : (na > nb ? 1 : 0);
+                });
+
+                var totalKm = 0;
+                grafoItems.forEach(function(f) { totalKm += grafoFeatureLength(f); });
+
+                w += '<h2>' + munLabel + ' &ndash; Grafo 2026 (' + grafoItems.length + ' archi, ' + totalKm.toFixed(2) + ' km)</h2>';
+                w += '<table>';
+                w += '<tr><th>#</th><th>Nome Strada</th><th>Classificazione</th><th>Km</th><th>Municipio</th><th>Note</th></tr>';
+                grafoItems.forEach(function(f, idx) {
+                    var cfCode = (f.classifica || '').toUpperCase();
+                    var cfLabel = classificaNames[cfCode] ? classificaNames[cfCode] + ' (' + cfCode + ')' : (cfCode || '');
+                    var km = grafoFeatureLength(f);
+                    var name = f.name || '(senza nome)';
+                    var note = f.note || '';
+                    w += '<tr>';
+                    w += '<td>' + (idx + 1) + '</td>';
+                    w += '<td>' + name + '</td>';
+                    w += '<td>' + cfLabel + '</td>';
+                    w += '<td>' + (km > 0 ? km.toFixed(2) : '') + '</td>';
+                    w += '<td>' + getMunLabel(munNum) + '</td>';
+                    w += '<td>' + (note ? '<span class="note">' + note.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>' : '') + '</td>';
+                    w += '</tr>';
+                });
+                w += '</table>';
+            });
+
             w += '<div class="footer">Report generato automaticamente da PGTU Roma &ndash; Mappa Interattiva</div>';
             w += '</body></html>';
 
@@ -3152,7 +3224,7 @@
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = 'report_proposte_pgtu_' + now.toISOString().slice(0, 10) + '.doc';
+            a.download = 'report_pgtu_' + now.toISOString().slice(0, 10) + '.doc';
             a.click();
             URL.revokeObjectURL(url);
           } catch(err) { alert('Errore generazione report Word: ' + err.message); console.error(err); }
@@ -3163,125 +3235,112 @@
           // Lazy-load SheetJS from CDN
           function doExcel() {
             try {
-              var proposte = loadProposte();
-              if (proposte.length === 0) { alert('Nessuna proposta da includere nel report.'); return; }
+              var rd = prepareReportData();
+              var proposte = rd.proposte;
+              var byMunicipio = rd.proposteByMunicipio;
+              var grafoByMunicipio = rd.grafoByMunicipio;
+              var munKeys = rd.munKeys;
 
-              // Resolve municipio via spatial overlay
-              var municPolygons = [];
-              layerMunicipii.eachLayer(function(layer) {
-                  try { var feat = layer.feature; if (feat && feat.geometry) municPolygons.push(feat); } catch(e) {}
-              });
-              proposte.forEach(function(p) {
-                  if (p.municipio) return;
-                  var turfPt;
-                  try {
-                      if (p.geometry && p.geometry.type === 'Point') turfPt = turf.point(p.geometry.coordinates);
-                      else if (p.geometry && p.geometry.coordinates) {
-                          var feat = turf.feature(p.geometry);
-                          turfPt = turf.centroid(feat);
-                          var inside = false;
-                          for (var ci = 0; ci < municPolygons.length; ci++) {
-                              if (turf.booleanPointInPolygon(turfPt, municPolygons[ci])) { inside = true; break; }
-                          }
-                          if (!inside) turfPt = turf.along(feat, turf.length(feat) / 2);
-                      }
-                  } catch(e) { turfPt = null; }
-                  if (!turfPt) return;
-                  for (var mi = 0; mi < municPolygons.length; mi++) {
-                      try {
-                          if (turf.booleanPointInPolygon(turfPt, municPolygons[mi])) {
-                              p.municipio = String(municPolygons[mi].properties.Numero || municPolygons[mi].properties.Attuale || '');
-                              break;
-                          }
-                      } catch(e) {}
+              function getItemRow(item, idx) {
+                  var name, cf, km, mun, notes;
+                  if (item.kind === 'road') {
+                      name = item.data.name || 'N/D';
+                      cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
+                      km = item.data.lunghezza > 0 ? Math.round(item.data.lunghezza * 100) / 100 : '';
+                      mun = item.data.municipio || '';
+                      notes = item.data.notes.length > 0 ? item.data.notes.join('; ') : '';
+                  } else {
+                      name = item.data.name || 'N/D';
+                      cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
+                      var len = item.data.lunghezza || calcGeoLength(item.data.geometry);
+                      km = len > 0 ? Math.round(len * 100) / 100 : '';
+                      mun = item.data.municipio || '';
+                      notes = (item.data.notes || '').trim();
                   }
-              });
-
-              // Fix drawn line names
-              proposte.forEach(function(p) {
-                  if (!p.name || !/^Linea\s+(Eliminazione|Inserimento)\s+\(disegnata\)$/i.test(p.name)) return;
-                  if (!p.notes || !p.notes.trim()) return;
-                  var noteText = p.notes.trim();
-                  var parenIdx = noteText.indexOf('(');
-                  if (parenIdx > 0) { p.name = noteText.substring(0, parenIdx).trim(); p.notes = noteText.substring(parenIdx).trim(); }
-                  else { p.name = noteText; p.notes = ''; }
-              });
-
-              // Group by municipio
-              var byMunicipio = {};
-              proposte.forEach(function(p) {
-                  var rawMun = String(p.municipio || '').trim();
-                  var munList = rawMun ? rawMun.split(/\s*[;,]\s*/).filter(function(m) { return m !== ''; }) : ['ND'];
-                  if (munList.length === 0) munList = ['ND'];
-                  munList.forEach(function(mun) {
-                      if (!byMunicipio[mun]) byMunicipio[mun] = [];
-                      byMunicipio[mun].push(p);
-                  });
-              });
-              var munKeys = Object.keys(byMunicipio).sort(function(a, b) {
-                  if (a === 'ND') return 1; if (b === 'ND') return -1;
-                  return parseInt(a) - parseInt(b);
-              });
+                  return [idx + 1, name, cf, km, mun ? getMunLabel(mun) : '', notes];
+              }
 
               // Build Excel workbook
               var wb = XLSX.utils.book_new();
+              var colWidths = [
+                  { wch: 5 },   // #
+                  { wch: 35 },  // Nome
+                  { wch: 18 },  // Classificazione
+                  { wch: 8 },   // Km
+                  { wch: 20 },  // Municipio
+                  { wch: 50 }   // Note
+              ];
 
+              // Proposte sheets per municipio
               munKeys.forEach(function(munNum) {
-                  var items = byMunicipio[munNum];
+                  var items = byMunicipio[munNum] || [];
                   var munLabel = getMunLabel(munNum);
                   var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
                   var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
                   var mergedElim = mergeProposte(munElim);
                   var mergedIns = mergeProposte(munIns);
 
-                  function getItemRow(item, idx) {
-                      var name, cf, km, notes;
-                      if (item.kind === 'road') {
-                          name = item.data.name || 'N/D';
-                          cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
-                          km = item.data.lunghezza > 0 ? Math.round(item.data.lunghezza * 100) / 100 : '';
-                          notes = item.data.notes.length > 0 ? item.data.notes.join('; ') : '';
-                      } else {
-                          name = item.data.name || 'N/D';
-                          cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
-                          var len = item.data.lunghezza || calcGeoLength(item.data.geometry);
-                          km = len > 0 ? Math.round(len * 100) / 100 : '';
-                          notes = (item.data.notes || '').trim();
-                      }
-                      return [idx + 1, name, cf, km, notes];
-                  }
-
                   var rows = [];
                   if (mergedElim.length > 0) {
-                      rows.push(['PROPOSTE DI ELIMINAZIONE (' + mergedElim.length + ')', '', '', '', '']);
-                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Note']);
+                      rows.push(['PROPOSTE DI ELIMINAZIONE (' + mergedElim.length + ')', '', '', '', '', '']);
+                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Note']);
                       mergedElim.forEach(function(item, idx) { rows.push(getItemRow(item, idx)); });
                       rows.push([]); // empty separator row
                   }
                   if (mergedIns.length > 0) {
-                      rows.push(['PROPOSTE DI INSERIMENTO (' + mergedIns.length + ')', '', '', '', '']);
-                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Note']);
+                      rows.push(['PROPOSTE DI INSERIMENTO (' + mergedIns.length + ')', '', '', '', '', '']);
+                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Note']);
                       mergedIns.forEach(function(item, idx) { rows.push(getItemRow(item, idx)); });
                   }
 
                   if (rows.length > 0) {
                       var ws = XLSX.utils.aoa_to_sheet(rows);
-                      // Set column widths
-                      ws['!cols'] = [
-                          { wch: 5 },   // #
-                          { wch: 35 },  // Nome
-                          { wch: 18 },  // Classificazione
-                          { wch: 8 },   // Km
-                          { wch: 50 }   // Note
-                      ];
-                      // Sheet name max 31 chars
-                      var sheetName = munLabel.length > 31 ? munLabel.substring(0, 31) : munLabel;
+                      ws['!cols'] = colWidths;
+                      var sheetName = ('P ' + munLabel).substring(0, 31);
                       XLSX.utils.book_append_sheet(wb, ws, sheetName);
                   }
               });
 
+              // Grafo 2026 sheets per municipio
+              munKeys.forEach(function(munNum) {
+                  var grafoItems = grafoByMunicipio[munNum] || [];
+                  if (grafoItems.length === 0) return;
+                  var munLabel = getMunLabel(munNum);
+
+                  grafoItems.sort(function(a, b) {
+                      var ca = (a.classifica || '').toUpperCase();
+                      var cb = (b.classifica || '').toUpperCase();
+                      if (ca !== cb) return ca < cb ? -1 : 1;
+                      var na = (a.name || '').toLowerCase();
+                      var nb = (b.name || '').toLowerCase();
+                      return na < nb ? -1 : (na > nb ? 1 : 0);
+                  });
+
+                  var rows = [];
+                  rows.push(['GRAFO 2026 - ' + munLabel + ' (' + grafoItems.length + ' archi)', '', '', '', '', '']);
+                  rows.push(['#', 'Nome Strada', 'Classificazione', 'Km', 'Municipio', 'Note']);
+                  grafoItems.forEach(function(f, idx) {
+                      var cfCode = (f.classifica || '').toUpperCase();
+                      var cfLabel = classificaNames[cfCode] ? classificaNames[cfCode] + ' (' + cfCode + ')' : (cfCode || '');
+                      var km = grafoFeatureLength(f);
+                      rows.push([
+                          idx + 1,
+                          f.name || '(senza nome)',
+                          cfLabel,
+                          km > 0 ? Math.round(km * 100) / 100 : '',
+                          getMunLabel(munNum),
+                          f.note || ''
+                      ]);
+                  });
+
+                  var ws = XLSX.utils.aoa_to_sheet(rows);
+                  ws['!cols'] = colWidths;
+                  var sheetName = ('G ' + munLabel).substring(0, 31);
+                  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+              });
+
               var now = new Date();
-              XLSX.writeFile(wb, 'report_proposte_pgtu_' + now.toISOString().slice(0, 10) + '.xlsx');
+              XLSX.writeFile(wb, 'report_pgtu_' + now.toISOString().slice(0, 10) + '.xlsx');
             } catch(err) { alert('Errore generazione report Excel: ' + err.message); console.error(err); }
           }
 
