@@ -2728,7 +2728,7 @@
             var munImagePromises = {};
             munKeys.forEach(function(munNum) {
                 if (munNum === 'ND') return;
-                munImagePromises[munNum] = renderMunMapImage(munNum, byMunicipio[munNum], 860, 400);
+                munImagePromises[munNum] = renderMunMapImage(munNum, byMunicipio[munNum] || [], 860, 400);
             });
 
             // Wait for all map images to load, then build report
@@ -2883,7 +2883,7 @@
             // Per-municipio km stats (computed from byMunicipio, using merged items to avoid double-counting fragments)
             var munKmStats = {};
             munKeys.forEach(function(munNum) {
-                var items = byMunicipio[munNum];
+                var items = byMunicipio[munNum] || [];
                 var mElim = mergeProposte(items.filter(function(p) { return p.type === 'eliminazione'; }));
                 var mIns = mergeProposte(items.filter(function(p) { return p.type === 'inserimento'; }));
                 var kmE = 0, kmI = 0;
@@ -2953,12 +2953,13 @@
 
             // Per-municipio sections
             munKeys.forEach(function(munNum) {
-                var items = byMunicipio[munNum];
+                var items = byMunicipio[munNum] || [];
                 var munLabel = getMunLabel(munNum);
                 var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
                 var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
                 var mergedElim = mergeProposte(munElim);
                 var mergedIns = mergeProposte(munIns);
+                if (mergedElim.length === 0 && mergedIns.length === 0) return;
                 var mStats = munKmStats[munNum] || { kmElim: 0, kmIns: 0, kmTot: 0 };
 
                 h += '<div class="mun-section">';
