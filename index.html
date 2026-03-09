@@ -1637,12 +1637,20 @@
             manualElimGroup.clearLayers();
             manualInsGroup.clearLayers();
             var proposte = loadProposte();
+            console.log('renderProposte: ' + proposte.length + ' proposte loaded');
+
+            // Ensure groups are on map if checkboxes are checked
+            var elimCb = document.getElementById('toggle-proposte-elim');
+            var insCb = document.getElementById('toggle-proposte-ins');
+            if (elimCb && elimCb.checked && !map.hasLayer(manualElimGroup)) map.addLayer(manualElimGroup);
+            if (insCb && insCb.checked && !map.hasLayer(manualInsGroup)) map.addLayer(manualInsGroup);
 
             proposte.forEach(function(p) {
                 var isElim = p.type === 'eliminazione';
                 var typeColor = isElim ? COLOR_ELIM : COLOR_INS;
                 var group = isElim ? manualElimGroup : manualInsGroup;
                 var popupHtml = buildPropostaPopup(p);
+                if (!p.geometry) console.warn('Proposta senza geometry:', p.id, p.name);
 
                 // Use classification color if available, otherwise fall back to type color
                 var lineColor = (p.classificazione && classificaColors[p.classificazione])
