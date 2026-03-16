@@ -6530,7 +6530,11 @@
                 'pl-strade-prov': { toggle: 'toggle-strade-prov', layer: function() { return layerStradeProvinciali; } },
                 'pl-extraurbane': { toggle: 'toggle-extraurbane', layer: function() { return layerExtraurbane; } },
                 'pl-centri-abitati': { toggle: 'toggle-centri-abitati', layer: function() { return layerCentriAbitati; } },
-                'pl-grafo2026': { toggle: 'toggle-grafo2026', layer: function() { return layerGrafo2026; } },
+                'pl-grafo2026': { toggle: 'toggle-grafo2026', layer: function() {
+                    // Ensure Grafo 2026 is populated even if not active on live map
+                    if (!grafo2026Active) { renderGrafo2026(); }
+                    return layerGrafo2026;
+                } },
                 'pl-low-traffic': { toggle: 'toggle-low-traffic', layer: function() { return layerLowTraffic; } },
                 'pl-high-traffic': { toggle: 'toggle-high-traffic', layer: function() { return layerHighTraffic; } },
                 'pl-atac': { toggle: 'toggle-atac', layer: function() { return layerATAC; } },
