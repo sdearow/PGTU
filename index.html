@@ -6974,14 +6974,12 @@
                     }, 'image/jpeg', 0.95);
                 } else if (outputFmt === 'pdf') {
                     var paper = paperSizes[paperFormat] || paperSizes['a4'];
-                    var orientation = paper.w > paper.h ? 'landscape' : 'portrait';
                     var jsPDF = window.jspdf && window.jspdf.jsPDF;
                     if (!jsPDF) { alert('jsPDF non disponibile. Riprova.'); callback(false); return; }
-                    var pdf = new jsPDF({ orientation: orientation, unit: 'mm', format: paperFormat });
+                    // paper.w is the long side, paper.h is the short side (all landscape)
+                    var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [paper.h, paper.w] });
                     var imgData = finalCanvas.toDataURL('image/jpeg', 0.92);
-                    var pdfW = orientation === 'landscape' ? paper.h : paper.w;
-                    var pdfH = orientation === 'landscape' ? paper.w : paper.h;
-                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+                    pdf.addImage(imgData, 'JPEG', 0, 0, paper.w, paper.h);
                     pdf.save(filename.replace(/\.png$/, '') + '.pdf');
                     callback(true);
                 } else {
