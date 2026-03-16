@@ -698,6 +698,128 @@
         .map-edit-cursor .leaflet-interactive {
             cursor: crosshair !important;
         }
+
+        /* Print/Export modal */
+        #print-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 10000;
+            justify-content: center;
+            align-items: center;
+        }
+        #print-modal-overlay.visible {
+            display: flex;
+        }
+        #print-modal {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            width: 520px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        #print-modal h2 {
+            font-size: 17px;
+            margin-bottom: 16px;
+            color: #333;
+            border-bottom: 2px solid #0079ff;
+            padding-bottom: 6px;
+        }
+        .print-section {
+            margin-bottom: 14px;
+        }
+        .print-section h4 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+        .print-section select {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 13px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .print-layers-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3px 12px;
+        }
+        .print-layer-item {
+            display: flex;
+            align-items: center;
+            padding: 3px 0;
+        }
+        .print-layer-item input[type="checkbox"] {
+            margin-right: 6px;
+            width: 14px;
+            height: 14px;
+        }
+        .print-layer-item label {
+            font-size: 12px;
+            color: #333;
+            cursor: pointer;
+        }
+        .print-options-row {
+            display: flex;
+            gap: 12px;
+        }
+        .print-options-row > div {
+            flex: 1;
+        }
+        .print-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+            justify-content: flex-end;
+        }
+        .print-actions button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        #print-btn-cancel {
+            background: #eee;
+            color: #555;
+        }
+        #print-btn-cancel:hover { background: #ddd; }
+        #print-btn-generate {
+            background: #0079ff;
+            color: white;
+        }
+        #print-btn-generate:hover { background: #005fc4; }
+        #print-btn-all {
+            background: #2c3e50;
+            color: white;
+        }
+        #print-btn-all:hover { background: #1a252f; }
+        #print-progress {
+            display: none;
+            margin-top: 12px;
+            text-align: center;
+        }
+        #print-progress .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+        #print-progress .progress-fill {
+            height: 100%;
+            background: #0079ff;
+            width: 0%;
+            transition: width 0.3s;
+        }
     </style>
 </head>
 <body>
@@ -1013,6 +1135,104 @@
                     </label>
                 </div>
             </div>
+
+            <!-- Stampa Mappa -->
+            <div class="control-section">
+                <h3>Stampa Mappa</h3>
+                <div style="font-size:11px;color:#666;margin-bottom:6px;">Genera immagini ad alta qualit&agrave; per municipio con scala</div>
+                <button class="edit-action-btn" id="btn-open-print" style="font-size:12px;padding:6px 10px;background:#8e44ad;color:white;font-weight:600;width:100%;">Genera Immagine Municipio</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print modal -->
+    <div id="print-modal-overlay">
+        <div id="print-modal">
+            <h2>Genera Immagine Municipio</h2>
+
+            <div class="print-section">
+                <h4>Municipio</h4>
+                <select id="print-municipio">
+                    <option value="">-- Seleziona Municipio --</option>
+                </select>
+            </div>
+
+            <div class="print-section">
+                <h4>Layer da visualizzare</h4>
+                <div style="margin-bottom:4px;">
+                    <a href="#" id="print-select-all" style="font-size:11px;color:#0079ff;">Seleziona tutti</a> |
+                    <a href="#" id="print-select-none" style="font-size:11px;color:#0079ff;">Deseleziona tutti</a> |
+                    <a href="#" id="print-select-current" style="font-size:11px;color:#0079ff;">Come mappa attuale</a>
+                </div>
+                <div class="print-layers-grid">
+                    <div class="print-layer-item"><input type="checkbox" id="pl-pgtu" checked><label for="pl-pgtu">PGTU Annesso D</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-pgtu-black"><label for="pl-pgtu-black">Annesso D (Nero)</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-strade-prov"><label for="pl-strade-prov">Strade Provinciali</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-extraurbane"><label for="pl-extraurbane">Strade Extraurbane</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-centri-abitati"><label for="pl-centri-abitati">Centri Abitati</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-grafo2026"><label for="pl-grafo2026">Grafo 2026</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-low-traffic"><label for="pl-low-traffic">Flussi Bassi</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-high-traffic"><label for="pl-high-traffic">Flussi Elevati</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-atac"><label for="pl-atac">Linee ATAC</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-tpl3"><label for="pl-tpl3">Rete TPL 3+</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-tpl5"><label for="pl-tpl5">Rete TPL 5+</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-tpl5-no-pgtu"><label for="pl-tpl5-no-pgtu">TPL5 non in Annesso D</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-pgtu-no-tpl5"><label for="pl-pgtu-no-tpl5">Annesso D non in TPL5</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-proposte-elim" checked><label for="pl-proposte-elim">Proposte Eliminazioni</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-proposte-ins" checked><label for="pl-proposte-ins">Proposte Inserimenti</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-disconnessioni"><label for="pl-disconnessioni">Disconnessioni Grafo</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-disc-class"><label for="pl-disc-class">Disconnessioni Classif.</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-disc-estrema"><label for="pl-disc-estrema">Discontinuit&agrave; Estreme</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-frammenti"><label for="pl-frammenti">Strade Frammentate</label></div>
+                </div>
+            </div>
+
+            <div class="print-section">
+                <div class="print-options-row">
+                    <div>
+                        <h4>Scala</h4>
+                        <select id="print-scale">
+                            <option value="auto">Automatica (adatta al municipio)</option>
+                            <option value="5000">1:5.000</option>
+                            <option value="10000">1:10.000</option>
+                            <option value="15000">1:15.000</option>
+                            <option value="20000">1:20.000</option>
+                            <option value="25000">1:25.000</option>
+                            <option value="50000">1:50.000</option>
+                            <option value="75000">1:75.000</option>
+                            <option value="100000">1:100.000</option>
+                        </select>
+                    </div>
+                    <div>
+                        <h4>Formato</h4>
+                        <select id="print-format">
+                            <option value="a3">A3 (297&times;420 mm)</option>
+                            <option value="a4" selected>A4 (210&times;297 mm)</option>
+                            <option value="a2">A2 (420&times;594 mm)</option>
+                            <option value="a1">A1 (594&times;841 mm)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <h4>DPI</h4>
+                        <select id="print-dpi">
+                            <option value="150">150 DPI</option>
+                            <option value="200">200 DPI</option>
+                            <option value="300" selected>300 DPI</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="print-progress">
+                <span id="print-progress-text">Generazione in corso...</span>
+                <div class="progress-bar"><div class="progress-fill" id="print-progress-fill"></div></div>
+            </div>
+
+            <div class="print-actions">
+                <button id="print-btn-cancel">Annulla</button>
+                <button id="print-btn-all">Tutti i Municipi</button>
+                <button id="print-btn-generate">Genera Immagine</button>
+            </div>
         </div>
     </div>
 
@@ -1069,6 +1289,9 @@
 
     <!-- Turf.js for spatial operations -->
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+    <!-- html2canvas for map export -->
+    <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
     <!-- GeoJSON data files -->
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/Municipi_1.js"></script>
@@ -6201,6 +6424,469 @@
                     break;
             }
         }
+
+        // =====================================================
+        // PRINT / EXPORT MAP IMAGE
+        // =====================================================
+        (function initPrintExport() {
+            var printOverlay = document.getElementById('print-modal-overlay');
+            var printMunicipioSel = document.getElementById('print-municipio');
+            var btnOpenPrint = document.getElementById('btn-open-print');
+            var btnCancel = document.getElementById('print-btn-cancel');
+            var btnGenerate = document.getElementById('print-btn-generate');
+            var btnAll = document.getElementById('print-btn-all');
+            var progressDiv = document.getElementById('print-progress');
+            var progressText = document.getElementById('print-progress-text');
+            var progressFill = document.getElementById('print-progress-fill');
+
+            // Populate print municipio dropdown from the main municipi list
+            layerMunicipii.eachLayer(function(layer) {
+                var p = layer.feature.properties;
+                var label = p.Name || ('Municipio ' + (p.Attuale || p.Numero));
+                var numero = p.Numero || p.Attuale || '';
+                var opt = document.createElement('option');
+                opt.value = numero;
+                opt.textContent = label;
+                printMunicipioSel.appendChild(opt);
+            });
+            // Sort options by numero
+            var opts = Array.from(printMunicipioSel.options).slice(1);
+            opts.sort(function(a, b) { return parseInt(a.value) - parseInt(b.value); });
+            opts.forEach(function(o) { printMunicipioSel.appendChild(o); });
+
+            // Layer mapping: print checkbox id -> { toggleId, layerVar }
+            var printLayerMap = {
+                'pl-pgtu': { toggle: 'toggle-pgtu', layer: function() { return layerPGTU; } },
+                'pl-pgtu-black': { toggle: 'toggle-pgtu-black', layer: function() { return layerPGTUBlack; } },
+                'pl-strade-prov': { toggle: 'toggle-strade-prov', layer: function() { return layerStradeProvinciali; } },
+                'pl-extraurbane': { toggle: 'toggle-extraurbane', layer: function() { return layerExtraurbane; } },
+                'pl-centri-abitati': { toggle: 'toggle-centri-abitati', layer: function() { return layerCentriAbitati; } },
+                'pl-grafo2026': { toggle: 'toggle-grafo2026', layer: function() { return layerGrafo2026; } },
+                'pl-low-traffic': { toggle: 'toggle-low-traffic', layer: function() { return layerLowTraffic; } },
+                'pl-high-traffic': { toggle: 'toggle-high-traffic', layer: function() { return layerHighTraffic; } },
+                'pl-atac': { toggle: 'toggle-atac', layer: function() { return layerATAC; } },
+                'pl-tpl3': { toggle: 'toggle-tpl3', layer: function() { return layerTPL3; } },
+                'pl-tpl5': { toggle: 'toggle-tpl5', layer: function() { return layerTPL5; } },
+                'pl-tpl5-no-pgtu': { toggle: 'toggle-tpl5-no-pgtu', layer: function() { return layerTPL5noPGTU; } },
+                'pl-pgtu-no-tpl5': { toggle: 'toggle-pgtu-no-tpl5', layer: function() { return layerPGTUnoTPL5; } },
+                'pl-proposte-elim': { toggle: 'toggle-proposte-elim', layer: function() { return manualElimGroup; } },
+                'pl-proposte-ins': { toggle: 'toggle-proposte-ins', layer: function() { return manualInsGroup; } },
+                'pl-disconnessioni': { toggle: 'toggle-disconnessioni', layer: function() { return layerDisconnessioni; } },
+                'pl-disc-class': { toggle: 'toggle-disc-classificazione', layer: function() { return layerDiscClassificazione; } },
+                'pl-disc-estrema': { toggle: 'toggle-disc-estrema', layer: function() { return layerDiscEstrema; } },
+                'pl-frammenti': { toggle: 'toggle-frammenti', layer: function() { return layerFrammenti; } }
+            };
+
+            // Select all/none/current links
+            document.getElementById('print-select-all').addEventListener('click', function(e) {
+                e.preventDefault();
+                Object.keys(printLayerMap).forEach(function(id) {
+                    document.getElementById(id).checked = true;
+                });
+            });
+            document.getElementById('print-select-none').addEventListener('click', function(e) {
+                e.preventDefault();
+                Object.keys(printLayerMap).forEach(function(id) {
+                    document.getElementById(id).checked = false;
+                });
+            });
+            document.getElementById('print-select-current').addEventListener('click', function(e) {
+                e.preventDefault();
+                Object.keys(printLayerMap).forEach(function(id) {
+                    var info = printLayerMap[id];
+                    var toggleEl = document.getElementById(info.toggle);
+                    document.getElementById(id).checked = toggleEl ? toggleEl.checked : false;
+                });
+            });
+
+            // Open modal
+            btnOpenPrint.addEventListener('click', function() {
+                printOverlay.classList.add('visible');
+                // Sync with current map state
+                document.getElementById('print-select-current').click();
+            });
+
+            // Close modal
+            btnCancel.addEventListener('click', function() {
+                printOverlay.classList.remove('visible');
+                progressDiv.style.display = 'none';
+            });
+            printOverlay.addEventListener('click', function(e) {
+                if (e.target === printOverlay) {
+                    printOverlay.classList.remove('visible');
+                    progressDiv.style.display = 'none';
+                }
+            });
+
+            // Paper sizes in mm
+            var paperSizes = {
+                'a4': { w: 297, h: 210 }, // landscape
+                'a3': { w: 420, h: 297 },
+                'a2': { w: 594, h: 420 },
+                'a1': { w: 841, h: 594 }
+            };
+
+            function getMunicipioLayer(numero) {
+                var found = null;
+                layerMunicipii.eachLayer(function(layer) {
+                    var p = layer.feature.properties;
+                    var num = p.Numero || p.Attuale || '';
+                    if (String(num) === String(numero)) found = layer;
+                });
+                return found;
+            }
+
+            function getMunicipioName(numero) {
+                var layer = getMunicipioLayer(numero);
+                if (!layer) return 'Municipio ' + numero;
+                var p = layer.feature.properties;
+                return p.Name || ('Municipio ' + (p.Attuale || p.Numero));
+            }
+
+            function generateImage(municipioNum, callback) {
+                var layer = getMunicipioLayer(municipioNum);
+                if (!layer) { callback(null); return; }
+
+                var bounds = layer.getBounds();
+                var dpiSel = parseInt(document.getElementById('print-dpi').value) || 300;
+                var scaleSel = document.getElementById('print-scale').value;
+                var formatSel = document.getElementById('print-format').value;
+                var paper = paperSizes[formatSel] || paperSizes['a4'];
+
+                // Calculate pixel dimensions from paper size and DPI
+                // 1 inch = 25.4 mm
+                var pixW = Math.round(paper.w / 25.4 * dpiSel);
+                var pixH = Math.round(paper.h / 25.4 * dpiSel);
+
+                // Save current map state
+                var origCenter = map.getCenter();
+                var origZoom = map.getZoom();
+                var mapContainer = document.getElementById('map');
+                var origWidth = mapContainer.style.width;
+                var origHeight = mapContainer.style.height;
+                var sidebar = document.querySelector('.sidebar');
+                var origSidebarDisplay = sidebar ? sidebar.style.display : '';
+
+                // Determine which layers to show/hide
+                var wantedLayers = {};
+                var savedStates = {};
+                Object.keys(printLayerMap).forEach(function(id) {
+                    var info = printLayerMap[id];
+                    var wanted = document.getElementById(id).checked;
+                    var lyr = info.layer();
+                    wantedLayers[id] = { wanted: wanted, layer: lyr };
+                    savedStates[id] = lyr ? map.hasLayer(lyr) : false;
+                });
+
+                // Also save municipio overlay state
+                var origGrayscale = document.querySelector('.leaflet-overlay-pane') ?
+                    document.querySelector('.leaflet-overlay-pane').style.filter : '';
+                var origMunicipioHighlight = selectedMunicipio;
+
+                // Apply desired layer states
+                Object.keys(wantedLayers).forEach(function(id) {
+                    var info = wantedLayers[id];
+                    if (!info.layer) return;
+                    if (info.wanted && !map.hasLayer(info.layer)) {
+                        map.addLayer(info.layer);
+                    } else if (!info.wanted && map.hasLayer(info.layer)) {
+                        map.removeLayer(info.layer);
+                    }
+                });
+
+                // Remove grayscale filter for print
+                setOverlayGrayscale(false);
+                updateMunicipioHighlight(null);
+
+                // Highlight the target municipio boundary
+                layerMunicipii.eachLayer(function(l) {
+                    var num = l.feature.properties.Numero || l.feature.properties.Attuale || '';
+                    if (String(num) === String(municipioNum)) {
+                        l.setStyle({ weight: 3, color: '#e74c3c', fillOpacity: 0.02 });
+                    } else {
+                        l.setStyle({ weight: 1, color: '#666', fillOpacity: 0.0, opacity: 0.3 });
+                    }
+                });
+
+                // Hide sidebar and UI
+                if (sidebar) sidebar.style.display = 'none';
+                document.querySelectorAll('.leaflet-control-container').forEach(function(el) {
+                    el._origDisplay = el.style.display;
+                    el.style.display = 'none';
+                });
+
+                // Resize map to target pixel size (scaled down for rendering speed)
+                var renderScale = Math.min(1, 4096 / Math.max(pixW, pixH));
+                var renderW = Math.round(pixW * renderScale);
+                var renderH = Math.round(pixH * renderScale);
+
+                mapContainer.style.width = renderW + 'px';
+                mapContainer.style.height = renderH + 'px';
+                mapContainer.style.position = 'absolute';
+                mapContainer.style.left = '0';
+                mapContainer.style.top = '0';
+                map.invalidateSize();
+
+                // Fit to municipio bounds with padding
+                var padPx = Math.round(Math.min(renderW, renderH) * 0.05);
+                map.fitBounds(bounds, { padding: [padPx, padPx], animate: false });
+
+                // Wait for tiles to load then capture
+                setTimeout(function() {
+                    // Wait a bit more for tile rendering
+                    setTimeout(function() {
+                        html2canvas(mapContainer, {
+                            useCORS: true,
+                            allowTaint: true,
+                            width: renderW,
+                            height: renderH,
+                            scale: 1 / renderScale,
+                            backgroundColor: '#ffffff',
+                            logging: false
+                        }).then(function(canvas) {
+                            // Add title, scale bar and legend to the canvas
+                            var finalCanvas = document.createElement('canvas');
+                            finalCanvas.width = pixW;
+                            finalCanvas.height = pixH;
+                            var ctx = finalCanvas.getContext('2d');
+
+                            // White background
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, pixW, pixH);
+
+                            // Header area
+                            var headerH = Math.round(pixH * 0.06);
+                            var footerH = Math.round(pixH * 0.04);
+                            var mapAreaH = pixH - headerH - footerH;
+
+                            // Draw map
+                            ctx.drawImage(canvas, 0, headerH, pixW, mapAreaH);
+
+                            // Header
+                            ctx.fillStyle = '#2c3e50';
+                            ctx.fillRect(0, 0, pixW, headerH);
+                            ctx.fillStyle = '#ffffff';
+                            var titleSize = Math.round(headerH * 0.45);
+                            ctx.font = 'bold ' + titleSize + 'px sans-serif';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText('PGTU Roma - ' + getMunicipioName(municipioNum), Math.round(headerH * 0.3), Math.round(headerH * 0.5));
+
+                            // Subtitle with format info
+                            var subSize = Math.round(headerH * 0.25);
+                            ctx.font = subSize + 'px sans-serif';
+                            ctx.fillStyle = '#bdc3c7';
+                            var scaleText = scaleSel === 'auto' ? 'Scala automatica' : '1:' + parseInt(scaleSel).toLocaleString('it-IT');
+                            ctx.fillText(formatSel.toUpperCase() + ' | ' + dpiSel + ' DPI | ' + scaleText,
+                                pixW - Math.round(headerH * 0.3) - ctx.measureText(formatSel.toUpperCase() + ' | ' + dpiSel + ' DPI | ' + scaleText).width,
+                                Math.round(headerH * 0.5));
+
+                            // Footer
+                            ctx.fillStyle = '#ecf0f1';
+                            ctx.fillRect(0, pixH - footerH, pixW, footerH);
+                            ctx.fillStyle = '#7f8c8d';
+                            var footerFontSize = Math.round(footerH * 0.35);
+                            ctx.font = footerFontSize + 'px sans-serif';
+                            ctx.textBaseline = 'middle';
+                            var dateStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: OpenStreetMap',
+                                Math.round(footerH * 0.3), pixH - Math.round(footerH * 0.5));
+
+                            // Build legend for active layers
+                            var legendItems = [];
+                            var legendColors = {
+                                'pl-pgtu': { color: '#e74c3c', label: 'PGTU Annesso D' },
+                                'pl-pgtu-black': { color: '#000000', label: 'Annesso D (Nero)' },
+                                'pl-strade-prov': { color: '#000000', label: 'Strade Provinciali' },
+                                'pl-extraurbane': { color: '#8B4513', label: 'Strade Extraurbane' },
+                                'pl-centri-abitati': { color: '#ff9800', label: 'Centri Abitati' },
+                                'pl-grafo2026': { color: '#2ecc71', label: 'Grafo 2026' },
+                                'pl-low-traffic': { color: '#27ae60', label: 'Flussi Bassi' },
+                                'pl-high-traffic': { color: '#e74c3c', label: 'Flussi Elevati' },
+                                'pl-atac': { color: '#9b59b6', label: 'Linee ATAC' },
+                                'pl-tpl3': { color: '#3498db', label: 'Rete TPL 3+' },
+                                'pl-tpl5': { color: '#e67e22', label: 'Rete TPL 5+' },
+                                'pl-tpl5-no-pgtu': { color: '#e65100', label: 'TPL5 non in Annesso D' },
+                                'pl-pgtu-no-tpl5': { color: '#1565c0', label: 'Annesso D non in TPL5' },
+                                'pl-proposte-elim': { color: '#ff0000', label: 'Proposte Eliminazioni' },
+                                'pl-proposte-ins': { color: '#00cc00', label: 'Proposte Inserimenti' },
+                                'pl-disconnessioni': { color: '#c0392b', label: 'Disconnessioni Grafo' },
+                                'pl-disc-class': { color: '#1565c0', label: 'Disconnessioni Classif.' },
+                                'pl-disc-estrema': { color: '#b71c1c', label: 'Discontinuità Estreme' },
+                                'pl-frammenti': { color: '#e67e22', label: 'Strade Frammentate' }
+                            };
+                            Object.keys(legendColors).forEach(function(id) {
+                                if (document.getElementById(id).checked) {
+                                    legendItems.push(legendColors[id]);
+                                }
+                            });
+
+                            // Draw legend box
+                            if (legendItems.length > 0) {
+                                var legFontSize = Math.round(pixH * 0.012);
+                                var legLineH = Math.round(legFontSize * 1.8);
+                                var legPad = Math.round(legFontSize * 0.8);
+                                var legW = Math.round(pixW * 0.18);
+                                var legH = legPad * 2 + legendItems.length * legLineH + legLineH;
+                                var legX = pixW - legW - Math.round(pixW * 0.015);
+                                var legY = headerH + Math.round(pixH * 0.015);
+
+                                ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                                ctx.strokeStyle = '#999';
+                                ctx.lineWidth = 1;
+                                ctx.fillRect(legX, legY, legW, legH);
+                                ctx.strokeRect(legX, legY, legW, legH);
+
+                                ctx.fillStyle = '#333';
+                                ctx.font = 'bold ' + Math.round(legFontSize * 1.1) + 'px sans-serif';
+                                ctx.textBaseline = 'top';
+                                ctx.fillText('Legenda', legX + legPad, legY + legPad);
+
+                                legendItems.forEach(function(item, i) {
+                                    var iy = legY + legPad + legLineH + i * legLineH;
+                                    ctx.fillStyle = item.color;
+                                    ctx.fillRect(legX + legPad, iy + Math.round(legFontSize * 0.2), Math.round(legFontSize * 1.5), Math.round(legFontSize * 0.5));
+                                    ctx.fillStyle = '#333';
+                                    ctx.font = legFontSize + 'px sans-serif';
+                                    ctx.fillText(item.label, legX + legPad + Math.round(legFontSize * 2), iy);
+                                });
+                            }
+
+                            // Convert to blob and download
+                            finalCanvas.toBlob(function(blob) {
+                                var url = URL.createObjectURL(blob);
+                                var a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'PGTU_' + getMunicipioName(municipioNum).replace(/\s+/g, '_') + '_' + formatSel.toUpperCase() + '.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+
+                                // Restore everything
+                                restoreMapState();
+                                callback(true);
+                            }, 'image/png');
+                        }).catch(function(err) {
+                            console.error('Print export error:', err);
+                            restoreMapState();
+                            callback(null);
+                        });
+                    }, 1500);
+                }, 500);
+
+                function restoreMapState() {
+                    // Restore sidebar
+                    if (sidebar) sidebar.style.display = origSidebarDisplay;
+                    document.querySelectorAll('.leaflet-control-container').forEach(function(el) {
+                        el.style.display = el._origDisplay || '';
+                    });
+
+                    // Restore map size
+                    mapContainer.style.width = origWidth;
+                    mapContainer.style.height = origHeight;
+                    mapContainer.style.position = '';
+                    mapContainer.style.left = '';
+                    mapContainer.style.top = '';
+                    map.invalidateSize();
+                    map.setView(origCenter, origZoom, { animate: false });
+
+                    // Restore layer states
+                    Object.keys(wantedLayers).forEach(function(id) {
+                        var info = wantedLayers[id];
+                        if (!info.layer) return;
+                        if (savedStates[id] && !map.hasLayer(info.layer)) {
+                            map.addLayer(info.layer);
+                        } else if (!savedStates[id] && map.hasLayer(info.layer)) {
+                            map.removeLayer(info.layer);
+                        }
+                    });
+
+                    // Restore municipio style/filter
+                    if (origMunicipioHighlight) {
+                        setOverlayGrayscale(true);
+                        updateMunicipioHighlight(origMunicipioHighlight);
+                        layerMunicipii.eachLayer(function(l) {
+                            var num = l.feature.properties.Numero || l.feature.properties.Attuale || '';
+                            if (String(num) === String(origMunicipioHighlight)) {
+                                l.setStyle(highlightMunicipiStyle);
+                            } else {
+                                l.setStyle(dimmedMunicipiStyle);
+                            }
+                        });
+                    } else {
+                        setOverlayGrayscale(false);
+                        updateMunicipioHighlight(null);
+                        layerMunicipii.eachLayer(function(l) {
+                            l.setStyle(defaultMunicipiStyle);
+                        });
+                    }
+                }
+            }
+
+            // Generate single municipio
+            btnGenerate.addEventListener('click', function() {
+                var mun = printMunicipioSel.value;
+                if (!mun) { alert('Seleziona un municipio.'); return; }
+
+                progressDiv.style.display = 'block';
+                progressText.textContent = 'Generazione immagine per ' + getMunicipioName(mun) + '...';
+                progressFill.style.width = '30%';
+                btnGenerate.disabled = true;
+                btnAll.disabled = true;
+
+                setTimeout(function() {
+                    generateImage(mun, function(result) {
+                        progressFill.style.width = '100%';
+                        if (result) {
+                            progressText.textContent = 'Immagine generata con successo!';
+                        } else {
+                            progressText.textContent = 'Errore nella generazione.';
+                        }
+                        btnGenerate.disabled = false;
+                        btnAll.disabled = false;
+                        setTimeout(function() { progressDiv.style.display = 'none'; progressFill.style.width = '0%'; }, 2000);
+                    });
+                }, 100);
+            });
+
+            // Generate all municipi
+            btnAll.addEventListener('click', function() {
+                var allMunicipi = [];
+                layerMunicipii.eachLayer(function(layer) {
+                    var p = layer.feature.properties;
+                    allMunicipi.push(String(p.Numero || p.Attuale || ''));
+                });
+                allMunicipi.sort(function(a, b) { return parseInt(a) - parseInt(b); });
+
+                if (!confirm('Verranno generate ' + allMunicipi.length + ' immagini. Continuare?')) return;
+
+                progressDiv.style.display = 'block';
+                btnGenerate.disabled = true;
+                btnAll.disabled = true;
+                var idx = 0;
+
+                function next() {
+                    if (idx >= allMunicipi.length) {
+                        progressText.textContent = 'Tutte le immagini generate!';
+                        progressFill.style.width = '100%';
+                        btnGenerate.disabled = false;
+                        btnAll.disabled = false;
+                        setTimeout(function() { progressDiv.style.display = 'none'; progressFill.style.width = '0%'; }, 3000);
+                        return;
+                    }
+                    var mun = allMunicipi[idx];
+                    var pct = Math.round((idx / allMunicipi.length) * 100);
+                    progressText.textContent = 'Generazione ' + (idx + 1) + '/' + allMunicipi.length + ' - ' + getMunicipioName(mun) + '...';
+                    progressFill.style.width = pct + '%';
+
+                    generateImage(mun, function() {
+                        idx++;
+                        setTimeout(next, 500);
+                    });
+                }
+                next();
+            });
+        })();
 
         // =====================================================
         // HIDE LOADING OVERLAY
