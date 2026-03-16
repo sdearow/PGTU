@@ -1145,7 +1145,7 @@
             <div class="control-section">
                 <h3>Stampa Mappa</h3>
                 <div style="font-size:11px;color:#666;margin-bottom:6px;">Genera immagini ad alta qualit&agrave; per municipio con scala</div>
-                <button class="edit-action-btn" id="btn-open-print" style="font-size:12px;padding:6px 10px;background:#8e44ad;color:white;font-weight:600;width:100%;">Genera Immagine Municipio</button>
+                <button class="edit-action-btn" id="btn-open-print" style="font-size:12px;padding:6px 10px;background:#8e44ad;color:white;font-weight:600;width:100%;">Stampa / Esporta Mappa</button>
             </div>
         </div>
     </div>
@@ -1226,6 +1226,14 @@
                             <option value="300" selected>300 DPI</option>
                         </select>
                     </div>
+                    <div>
+                        <h4>Output</h4>
+                        <select id="print-output-format">
+                            <option value="png">PNG</option>
+                            <option value="jpeg">JPEG</option>
+                            <option value="pdf">PDF</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -1238,7 +1246,7 @@
                 <button id="print-btn-cancel">Annulla</button>
                 <button id="print-btn-full">Mappa Completa</button>
                 <button id="print-btn-all">Tutti i Municipi</button>
-                <button id="print-btn-generate">Genera Immagine</button>
+                <button id="print-btn-generate">Genera Municipio</button>
             </div>
         </div>
     </div>
@@ -1297,6 +1305,9 @@
     <!-- Turf.js for spatial operations -->
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+
     <!-- GeoJSON data files -->
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/Municipi_1.js"></script>
     <script src="Mappe Proposte_130224/Tabella 1/Mappa/layers/PGTUAnnessoD_5.js"></script>
@@ -1348,20 +1359,25 @@
             wheelDebounceTime: 80
         });
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
         }).addTo(map);
-        // Convert OSM tiles to high-contrast B&W
-        document.querySelector('.leaflet-tile-pane').style.filter = 'saturate(0) contrast(1.3)';
 
         // Custom pane for background layers (above tiles at 200, below overlays at 400)
         map.createPane('backgroundPane');
         map.getPane('backgroundPane').style.zIndex = 250;
 
+        // Mask pane for B&W effect outside selected municipio (above tiles, below background layers)
+        map.createPane('maskPane');
+        map.getPane('maskPane').style.zIndex = 201;
+
         // Highlight pane for municipio filter (above overlays, never grayscaled)
         map.createPane('highlightPane');
         map.getPane('highlightPane').style.zIndex = 450;
+
+        var bwMaskLayer = null; // inverted polygon mask for B&W outside municipio
 
         // =====================================================
         // STYLE FUNCTIONS
@@ -4338,17 +4354,61 @@
             if (!map.hasLayer(municipioHighlightGroup)) map.addLayer(municipioHighlightGroup);
         }
 
-        // Apply/remove grayscale to overlay panes
+        // Apply/remove grayscale to overlay panes and tile pane
         function setOverlayGrayscale(on) {
             var overlayPane = map.getPane('overlayPane');
             var bgPane = map.getPane('backgroundPane');
+            var tilePane = document.querySelector('.leaflet-tile-pane');
             if (on) {
                 overlayPane.style.filter = 'grayscale(1) opacity(0.35)';
                 bgPane.style.filter = 'grayscale(1) opacity(0.35)';
+                tilePane.style.filter = 'saturate(0) contrast(1.3)';
             } else {
                 overlayPane.style.filter = '';
                 bgPane.style.filter = '';
+                tilePane.style.filter = '';
             }
+        }
+
+        // Create/update inverted mask polygon (world minus municipio) for B&W effect outside
+        function updateBWMask(munNum) {
+            if (bwMaskLayer) { map.removeLayer(bwMaskLayer); bwMaskLayer = null; }
+            if (!munNum) return;
+
+            var munLayer = null;
+            layerMunicipii.eachLayer(function(l) {
+                var num = l.feature.properties.Numero || l.feature.properties.Attuale || '';
+                if (String(num) === String(munNum)) munLayer = l;
+            });
+            if (!munLayer) return;
+
+            // Build inverted polygon: world exterior with municipio as hole
+            var worldRing = [[-90, -180], [-90, 180], [90, 180], [90, -180], [-90, -180]];
+            var geom = munLayer.feature.geometry;
+            var holes = [];
+            if (geom.type === 'Polygon') {
+                holes = geom.coordinates.map(function(ring) {
+                    return ring.map(function(c) { return [c[1], c[0]]; }); // flip to [lat, lng] for Leaflet
+                });
+            } else if (geom.type === 'MultiPolygon') {
+                geom.coordinates.forEach(function(poly) {
+                    poly.forEach(function(ring) {
+                        holes.push(ring.map(function(c) { return [c[1], c[0]]; }));
+                    });
+                });
+            }
+
+            // L.polygon expects [lat, lng] arrays
+            var latlngs = [worldRing.map(function(c) { return [c[0], c[1]]; })];
+            holes.forEach(function(h) { latlngs.push(h); });
+
+            bwMaskLayer = L.polygon(latlngs, {
+                pane: 'maskPane',
+                fillColor: '#ffffff',
+                fillOpacity: 0.65,
+                stroke: false,
+                interactive: false
+            }).addTo(map);
         }
 
         // --- Clip line geometries to the municipio polygon boundary ---
@@ -4409,12 +4469,14 @@
                 }
             });
 
-            // Apply grayscale/highlight filter
+            // Apply grayscale/highlight filter and B&W mask
             if (selectedMunicipio) {
                 setOverlayGrayscale(true);
+                updateBWMask(selectedMunicipio);
                 updateMunicipioHighlight(selectedMunicipio);
             } else {
                 setOverlayGrayscale(false);
+                updateBWMask(null);
                 updateMunicipioHighlight(null);
             }
 
@@ -4454,6 +4516,7 @@
             selectedMunicipio = null;
             layerMunicipii.eachLayer(function(layer) { layer.setStyle(defaultMunicipiStyle); });
             setOverlayGrayscale(false);
+            updateBWMask(null);
             updateMunicipioHighlight(null);
         });
 
@@ -6571,15 +6634,14 @@
                 var loaded = 0;
                 var subdomains = ['a', 'b', 'c'];
 
-                // Apply B&W filter like the live map
-                ctx.filter = 'saturate(0) contrast(1.3)';
+                var subdomainsCarto = ['a', 'b', 'c', 'd'];
 
                 for (var tx = tileXmin; tx <= tileXmax; tx++) {
                     for (var ty = tileYmin; ty <= tileYmax; ty++) {
-                        if (ty < 0 || ty >= n) { loaded++; if (loaded >= totalTiles) { ctx.filter = 'none'; callback(); } continue; }
+                        if (ty < 0 || ty >= n) { loaded++; if (loaded >= totalTiles) { callback(); } continue; }
                         var txx = ((tx % n) + n) % n;
                         (function(tx2, ty2, txx2) {
-                            var s = subdomains[(txx2 + ty2) % 3];
+                            var s = subdomainsCarto[(txx2 + ty2) % 4];
                             var img = new Image();
                             img.crossOrigin = 'anonymous';
                             img.onload = function() {
@@ -6587,17 +6649,17 @@
                                 var dy = ty2 * 256 - originY;
                                 ctx.drawImage(img, Math.round(dx), Math.round(dy), 256, 256);
                                 loaded++;
-                                if (loaded >= totalTiles) { ctx.filter = 'none'; callback(); }
+                                if (loaded >= totalTiles) { callback(); }
                             };
                             img.onerror = function() {
                                 loaded++;
-                                if (loaded >= totalTiles) { ctx.filter = 'none'; callback(); }
+                                if (loaded >= totalTiles) { callback(); }
                             };
-                            img.src = 'https://' + s + '.tile.openstreetmap.org/' + zoom + '/' + txx2 + '/' + ty2 + '.png';
+                            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + txx2 + '/' + ty2 + '.png';
                         })(tx, ty, txx);
                     }
                 }
-                if (totalTiles === 0) { ctx.filter = 'none'; callback(); }
+                if (totalTiles === 0) { callback(); }
             }
 
             // Draw a single GeoJSON geometry on canvas
@@ -6877,10 +6939,54 @@
                 ctx.font = footerFontSize + 'px sans-serif';
                 ctx.textBaseline = 'middle';
                 var dateStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: OpenStreetMap',
+                ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: CARTO Positron / OpenStreetMap',
                     Math.round(footerH * 0.3), pixH - Math.round(footerH * 0.5));
 
                 return { headerH: headerH, footerH: footerH };
+            }
+
+            // Export canvas to the selected output format (png, jpeg, pdf)
+            function exportCanvas(finalCanvas, filename, paperFormat, callback) {
+                var outputFmt = (document.getElementById('print-output-format') || {}).value || 'png';
+
+                if (outputFmt === 'jpeg') {
+                    finalCanvas.toBlob(function(blob) {
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename.replace(/\.png$/, '') + '.jpg';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        callback(true);
+                    }, 'image/jpeg', 0.95);
+                } else if (outputFmt === 'pdf') {
+                    var paper = paperSizes[paperFormat] || paperSizes['a4'];
+                    var orientation = paper.w > paper.h ? 'landscape' : 'portrait';
+                    var jsPDF = window.jspdf && window.jspdf.jsPDF;
+                    if (!jsPDF) { alert('jsPDF non disponibile. Riprova.'); callback(false); return; }
+                    var pdf = new jsPDF({ orientation: orientation, unit: 'mm', format: paperFormat });
+                    var imgData = finalCanvas.toDataURL('image/jpeg', 0.92);
+                    var pdfW = orientation === 'landscape' ? paper.h : paper.w;
+                    var pdfH = orientation === 'landscape' ? paper.w : paper.h;
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+                    pdf.save(filename.replace(/\.png$/, '') + '.pdf');
+                    callback(true);
+                } else {
+                    // PNG (default)
+                    finalCanvas.toBlob(function(blob) {
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename.replace(/\.png$/, '') + '.png';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        callback(true);
+                    }, 'image/png');
+                }
             }
 
             function generateImage(municipioNum, callback) {
@@ -6949,17 +7055,8 @@
                     var legendItems = buildLegendItems();
                     drawLegend(ctx, legendItems, pixW, pixH, headerH);
 
-                    finalCanvas.toBlob(function(blob) {
-                        var url = URL.createObjectURL(blob);
-                        var a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'PGTU_' + getMunicipioName(municipioNum).replace(/\s+/g, '_') + '_' + formatSel.toUpperCase() + '.png';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        callback(true);
-                    }, 'image/png');
+                    var fname = 'PGTU_' + getMunicipioName(municipioNum).replace(/\s+/g, '_') + '_' + formatSel.toUpperCase();
+                    exportCanvas(finalCanvas, fname, formatSel, callback);
                 });
             }
 
@@ -7019,17 +7116,8 @@
                     var legendItems = buildLegendItems();
                     drawLegend(ctx, legendItems, pixW, pixH, headerH);
 
-                    finalCanvas.toBlob(function(blob) {
-                        var url = URL.createObjectURL(blob);
-                        var a = document.createElement('a');
-                        a.href = url;
-                        a.download = 'PGTU_Mappa_Completa_' + formatSel.toUpperCase() + '.png';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        callback(true);
-                    }, 'image/png');
+                    var fname = 'PGTU_Mappa_Completa_' + formatSel.toUpperCase();
+                    exportCanvas(finalCanvas, fname, formatSel, callback);
                 });
             }
 
