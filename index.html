@@ -1359,11 +1359,12 @@
             wheelDebounceTime: 80
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
-            subdomains: 'abcd',
-            maxZoom: 20
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
         }).addTo(map);
+        // Convert OSM tiles to high-contrast B&W
+        document.querySelector('.leaflet-tile-pane').style.filter = 'saturate(0) contrast(1.3)';
 
         // Custom pane for background layers (above tiles at 200, below overlays at 400)
         map.createPane('backgroundPane');
@@ -4354,19 +4355,16 @@
             if (!map.hasLayer(municipioHighlightGroup)) map.addLayer(municipioHighlightGroup);
         }
 
-        // Apply/remove grayscale to overlay panes and tile pane
+        // Apply/remove grayscale to overlay panes
         function setOverlayGrayscale(on) {
             var overlayPane = map.getPane('overlayPane');
             var bgPane = map.getPane('backgroundPane');
-            var tilePane = document.querySelector('.leaflet-tile-pane');
             if (on) {
                 overlayPane.style.filter = 'grayscale(1) opacity(0.35)';
                 bgPane.style.filter = 'grayscale(1) opacity(0.35)';
-                tilePane.style.filter = 'saturate(0) contrast(1.3)';
             } else {
                 overlayPane.style.filter = '';
                 bgPane.style.filter = '';
-                tilePane.style.filter = '';
             }
         }
 
