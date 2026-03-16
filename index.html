@@ -214,7 +214,7 @@
             width: 24px;
             height: 0;
             margin-right: 6px;
-            border-top: 4px dashed;
+            border-top: 3px dashed;
             flex-shrink: 0;
         }
         .legend-dot {
@@ -1132,6 +1132,10 @@
         map.createPane('backgroundPane');
         map.getPane('backgroundPane').style.zIndex = 250;
 
+        // Highlight pane for municipio filter (above overlays, never grayscaled)
+        map.createPane('highlightPane');
+        map.getPane('highlightPane').style.zIndex = 450;
+
         // =====================================================
         // STYLE FUNCTIONS
         // =====================================================
@@ -1832,9 +1836,9 @@
                         style: function() {
                             return {
                                 color: lineColor,
-                                weight: 8,
+                                weight: 5,
                                 opacity: 0.9,
-                                dashArray: '12,8',
+                                dashArray: '8,6',
                                 lineCap: 'butt',
                                 lineJoin: 'bevel'
                             };
@@ -3950,6 +3954,151 @@
         var selectedMunicipio = null;
         var activeTab = 'tab1';
 
+        // --- Municipio highlight layer (rendered on highlightPane, never grayscaled) ---
+        var municipioHighlightGroup = L.layerGroup();
+
+        // Find the municipio polygon GeoJSON for a given numero
+        function getMunicipioPolygon(munNum) {
+            var poly = null;
+            layerMunicipii.eachLayer(function(layer) {
+                var num = layer.feature.properties.Numero || layer.feature.properties.Attuale || '';
+                if (String(num) === String(munNum)) poly = layer.toGeoJSON();
+            });
+            return poly;
+        }
+
+        // Check if any coordinate of a geometry falls inside a polygon
+        function geometryIntersectsPoly(geometry, poly) {
+            if (!geometry || !poly) return false;
+            var coords = [];
+            function extractCoords(geom) {
+                if (!geom) return;
+                if (geom.type === 'Point') { coords.push(geom.coordinates); return; }
+                if (geom.type === 'MultiPoint') { geom.coordinates.forEach(function(c) { coords.push(c); }); return; }
+                if (geom.type === 'LineString') { geom.coordinates.forEach(function(c) { coords.push(c); }); return; }
+                if (geom.type === 'MultiLineString') { geom.coordinates.forEach(function(line) { line.forEach(function(c) { coords.push(c); }); }); return; }
+                if (geom.type === 'Polygon') { geom.coordinates[0].forEach(function(c) { coords.push(c); }); return; }
+                if (geom.type === 'MultiPolygon') { geom.coordinates.forEach(function(p) { p[0].forEach(function(c) { coords.push(c); }); }); return; }
+                if (geom.type === 'GeometryCollection') { geom.geometries.forEach(extractCoords); }
+            }
+            extractCoords(geometry);
+            // Sample up to 10 evenly-spaced points for performance
+            var step = Math.max(1, Math.floor(coords.length / 10));
+            for (var i = 0; i < coords.length; i += step) {
+                if (turf.booleanPointInPolygon(turf.point(coords[i]), poly)) return true;
+            }
+            // Always check last point
+            if (coords.length > 0 && turf.booleanPointInPolygon(turf.point(coords[coords.length - 1]), poly)) return true;
+            return false;
+        }
+
+        // Re-render colored features inside the selected municipio on highlightPane
+        function updateMunicipioHighlight(munNum) {
+            municipioHighlightGroup.clearLayers();
+            if (!munNum) {
+                if (map.hasLayer(municipioHighlightGroup)) map.removeLayer(municipioHighlightGroup);
+                return;
+            }
+            var poly = getMunicipioPolygon(munNum);
+            if (!poly) return;
+
+            // Helper: clone sublayers from a layer group that intersect the municipio
+            function cloneIntersecting(sourceLayer) {
+                if (!sourceLayer || !map.hasLayer(sourceLayer)) return;
+                var iterate = function(layer) {
+                    // Handle circleMarkers (points)
+                    if (layer instanceof L.CircleMarker && !(layer instanceof L.Circle)) {
+                        var ll = layer.getLatLng();
+                        var pt = turf.point([ll.lng, ll.lat]);
+                        if (turf.booleanPointInPolygon(pt, poly)) {
+                            var opts = layer.options || {};
+                            var clone = L.circleMarker([ll.lat, ll.lng], {
+                                radius: opts.radius || 6,
+                                color: opts.color || '#888',
+                                fillColor: opts.fillColor || opts.color || '#888',
+                                fillOpacity: opts.fillOpacity || 0.7,
+                                weight: opts.weight || 2,
+                                opacity: opts.opacity || 1,
+                                pane: 'highlightPane',
+                                interactive: false
+                            });
+                            municipioHighlightGroup.addLayer(clone);
+                        }
+                        return;
+                    }
+                    // Handle GeoJSON features (lines, polygons)
+                    if (layer.feature && layer.feature.geometry) {
+                        if (geometryIntersectsPoly(layer.feature.geometry, poly)) {
+                            var opts = layer.options || {};
+                            var style = {
+                                color: opts.color || '#888',
+                                weight: opts.weight || 3,
+                                opacity: opts.opacity || 1,
+                                dashArray: opts.dashArray || null,
+                                lineCap: opts.lineCap || 'round',
+                                lineJoin: opts.lineJoin || 'round',
+                                fillColor: opts.fillColor,
+                                fillOpacity: opts.fillOpacity,
+                                pane: 'highlightPane',
+                                interactive: false
+                            };
+                            var clone = L.geoJSON(layer.feature, { style: function() { return style; } });
+                            municipioHighlightGroup.addLayer(clone);
+                        }
+                    }
+                };
+                if (typeof sourceLayer.eachLayer === 'function') {
+                    sourceLayer.eachLayer(function(sub) {
+                        // L.layerGroup wrapping L.geoJSON layers - recurse
+                        if (typeof sub.eachLayer === 'function') {
+                            sub.eachLayer(iterate);
+                        } else {
+                            iterate(sub);
+                        }
+                    });
+                }
+            }
+
+            // Clone all active layers (check existence for layers declared later)
+            cloneIntersecting(layerPGTU);
+            cloneIntersecting(layerPGTUBlack);
+            cloneIntersecting(layerLowTraffic);
+            cloneIntersecting(layerHighTraffic);
+            if (typeof layerStradeProvinciali !== 'undefined' && layerStradeProvinciali) cloneIntersecting(layerStradeProvinciali);
+            if (typeof layerExtraurbane !== 'undefined') cloneIntersecting(layerExtraurbane);
+            if (typeof layerATAC !== 'undefined' && layerATAC) cloneIntersecting(layerATAC);
+            if (typeof layerTPL3 !== 'undefined' && layerTPL3) cloneIntersecting(layerTPL3);
+            if (typeof layerTPL5 !== 'undefined' && layerTPL5) cloneIntersecting(layerTPL5);
+            if (typeof layerGrafo2026 !== 'undefined') cloneIntersecting(layerGrafo2026);
+            if (typeof layerDisconnessioni !== 'undefined') cloneIntersecting(layerDisconnessioni);
+            if (typeof layerDiscClassificazione !== 'undefined') cloneIntersecting(layerDiscClassificazione);
+            if (typeof layerDiscEstrema !== 'undefined') cloneIntersecting(layerDiscEstrema);
+            if (typeof layerFrammenti !== 'undefined') cloneIntersecting(layerFrammenti);
+
+            // Clone proposte (eliminazioni + inserimenti)
+            cloneIntersecting(manualElimGroup);
+            cloneIntersecting(manualInsGroup);
+
+            // TPL mismatch layers
+            if (typeof layerTPL5noPGTU !== 'undefined') cloneIntersecting(layerTPL5noPGTU);
+            if (typeof layerPGTUnoTPL5 !== 'undefined') cloneIntersecting(layerPGTUnoTPL5);
+
+            if (!map.hasLayer(municipioHighlightGroup)) map.addLayer(municipioHighlightGroup);
+        }
+
+        // Apply/remove grayscale to overlay panes
+        function setOverlayGrayscale(on) {
+            var overlayPane = map.getPane('overlayPane');
+            var bgPane = map.getPane('backgroundPane');
+            if (on) {
+                overlayPane.style.filter = 'grayscale(1) opacity(0.35)';
+                bgPane.style.filter = 'grayscale(1) opacity(0.35)';
+            } else {
+                overlayPane.style.filter = '';
+                bgPane.style.filter = '';
+            }
+        }
+
         select.addEventListener('change', function() {
             selectedMunicipio = this.value;
             layerMunicipii.eachLayer(function(layer) {
@@ -3963,6 +4112,16 @@
                     layer.setStyle(dimmedMunicipiStyle);
                 }
             });
+
+            // Apply grayscale/highlight filter
+            if (selectedMunicipio) {
+                setOverlayGrayscale(true);
+                updateMunicipioHighlight(selectedMunicipio);
+            } else {
+                setOverlayGrayscale(false);
+                updateMunicipioHighlight(null);
+            }
+
             if (selectedMunicipio) showTablePanel(selectedMunicipio);
             else hideTablePanel();
         });
@@ -3998,6 +4157,8 @@
             select.value = '';
             selectedMunicipio = null;
             layerMunicipii.eachLayer(function(layer) { layer.setStyle(defaultMunicipiStyle); });
+            setOverlayGrayscale(false);
+            updateMunicipioHighlight(null);
         });
 
         document.getElementById('tab-buttons').addEventListener('click', function(e) {
