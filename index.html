@@ -796,6 +796,11 @@
             color: white;
         }
         #print-btn-generate:hover { background: #005fc4; }
+        #print-btn-full {
+            background: #8e44ad;
+            color: white;
+        }
+        #print-btn-full:hover { background: #732d91; }
         #print-btn-all {
             background: #2c3e50;
             color: white;
@@ -1148,12 +1153,13 @@
     <!-- Print modal -->
     <div id="print-modal-overlay">
         <div id="print-modal">
-            <h2>Genera Immagine Municipio</h2>
+            <h2>Genera Immagine</h2>
 
             <div class="print-section">
                 <h4>Municipio</h4>
                 <select id="print-municipio">
                     <option value="">-- Seleziona Municipio --</option>
+                    <option value="all">Tutti - Mappa Completa</option>
                 </select>
             </div>
 
@@ -1230,6 +1236,7 @@
 
             <div class="print-actions">
                 <button id="print-btn-cancel">Annulla</button>
+                <button id="print-btn-full">Mappa Completa</button>
                 <button id="print-btn-all">Tutti i Municipi</button>
                 <button id="print-btn-generate">Genera Immagine</button>
             </div>
@@ -6435,6 +6442,7 @@
             var btnCancel = document.getElementById('print-btn-cancel');
             var btnGenerate = document.getElementById('print-btn-generate');
             var btnAll = document.getElementById('print-btn-all');
+            var btnFull = document.getElementById('print-btn-full');
             var progressDiv = document.getElementById('print-progress');
             var progressText = document.getElementById('print-progress-text');
             var progressFill = document.getElementById('print-progress-fill');
@@ -6823,16 +6831,296 @@
                 }
             }
 
-            // Generate single municipio
+            // Generate full map (all municipalities in one image)
+            function generateFullImage(callback) {
+                var bounds = layerMunicipii.getBounds();
+                var dpiSel = parseInt(document.getElementById('print-dpi').value) || 300;
+                var scaleSel = document.getElementById('print-scale').value;
+                var formatSel = document.getElementById('print-format').value;
+                var paper = paperSizes[formatSel] || paperSizes['a4'];
+
+                var pixW = Math.round(paper.w / 25.4 * dpiSel);
+                var pixH = Math.round(paper.h / 25.4 * dpiSel);
+
+                var origCenter = map.getCenter();
+                var origZoom = map.getZoom();
+                var mapContainer = document.getElementById('map');
+                var origWidth = mapContainer.style.width;
+                var origHeight = mapContainer.style.height;
+                var sidebar = document.querySelector('.sidebar');
+                var origSidebarDisplay = sidebar ? sidebar.style.display : '';
+
+                var wantedLayers = {};
+                var savedStates = {};
+                Object.keys(printLayerMap).forEach(function(id) {
+                    var info = printLayerMap[id];
+                    var wanted = document.getElementById(id).checked;
+                    var lyr = info.layer();
+                    wantedLayers[id] = { wanted: wanted, layer: lyr };
+                    savedStates[id] = lyr ? map.hasLayer(lyr) : false;
+                });
+
+                var origMunicipioHighlight = selectedMunicipio;
+
+                Object.keys(wantedLayers).forEach(function(id) {
+                    var info = wantedLayers[id];
+                    if (!info.layer) return;
+                    if (info.wanted && !map.hasLayer(info.layer)) {
+                        map.addLayer(info.layer);
+                    } else if (!info.wanted && map.hasLayer(info.layer)) {
+                        map.removeLayer(info.layer);
+                    }
+                });
+
+                setOverlayGrayscale(false);
+                updateMunicipioHighlight(null);
+
+                // Show all municipalities with equal styling
+                layerMunicipii.eachLayer(function(l) {
+                    l.setStyle({ weight: 2, color: '#333', fillOpacity: 0.02, opacity: 0.8 });
+                });
+
+                if (sidebar) sidebar.style.display = 'none';
+                document.querySelectorAll('.leaflet-control-container').forEach(function(el) {
+                    el._origDisplay = el.style.display;
+                    el.style.display = 'none';
+                });
+
+                var renderScale = Math.min(1, 4096 / Math.max(pixW, pixH));
+                var renderW = Math.round(pixW * renderScale);
+                var renderH = Math.round(pixH * renderScale);
+
+                mapContainer.style.width = renderW + 'px';
+                mapContainer.style.height = renderH + 'px';
+                mapContainer.style.position = 'absolute';
+                mapContainer.style.left = '0';
+                mapContainer.style.top = '0';
+                map.invalidateSize();
+
+                var padPx = Math.round(Math.min(renderW, renderH) * 0.05);
+                map.fitBounds(bounds, { padding: [padPx, padPx], animate: false });
+
+                setTimeout(function() {
+                    setTimeout(function() {
+                        html2canvas(mapContainer, {
+                            useCORS: true,
+                            allowTaint: true,
+                            width: renderW,
+                            height: renderH,
+                            scale: 1 / renderScale,
+                            backgroundColor: '#ffffff',
+                            logging: false
+                        }).then(function(canvas) {
+                            var finalCanvas = document.createElement('canvas');
+                            finalCanvas.width = pixW;
+                            finalCanvas.height = pixH;
+                            var ctx = finalCanvas.getContext('2d');
+
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, pixW, pixH);
+
+                            var headerH = Math.round(pixH * 0.06);
+                            var footerH = Math.round(pixH * 0.04);
+                            var mapAreaH = pixH - headerH - footerH;
+
+                            ctx.drawImage(canvas, 0, headerH, pixW, mapAreaH);
+
+                            // Header
+                            ctx.fillStyle = '#2c3e50';
+                            ctx.fillRect(0, 0, pixW, headerH);
+                            ctx.fillStyle = '#ffffff';
+                            var titleSize = Math.round(headerH * 0.45);
+                            ctx.font = 'bold ' + titleSize + 'px sans-serif';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText('PGTU Roma - Mappa Completa (Tutti i Municipi)', Math.round(headerH * 0.3), Math.round(headerH * 0.5));
+
+                            var subSize = Math.round(headerH * 0.25);
+                            ctx.font = subSize + 'px sans-serif';
+                            ctx.fillStyle = '#bdc3c7';
+                            var scaleText = scaleSel === 'auto' ? 'Scala automatica' : '1:' + parseInt(scaleSel).toLocaleString('it-IT');
+                            var subStr = formatSel.toUpperCase() + ' | ' + dpiSel + ' DPI | ' + scaleText;
+                            ctx.fillText(subStr,
+                                pixW - Math.round(headerH * 0.3) - ctx.measureText(subStr).width,
+                                Math.round(headerH * 0.5));
+
+                            // Footer
+                            ctx.fillStyle = '#ecf0f1';
+                            ctx.fillRect(0, pixH - footerH, pixW, footerH);
+                            ctx.fillStyle = '#7f8c8d';
+                            var footerFontSize = Math.round(footerH * 0.35);
+                            ctx.font = footerFontSize + 'px sans-serif';
+                            ctx.textBaseline = 'middle';
+                            var dateStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                            ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: OpenStreetMap',
+                                Math.round(footerH * 0.3), pixH - Math.round(footerH * 0.5));
+
+                            // Legend
+                            var legendItems = [];
+                            var legendColors = {
+                                'pl-pgtu': { color: '#e74c3c', label: 'PGTU Annesso D' },
+                                'pl-pgtu-black': { color: '#000000', label: 'Annesso D (Nero)' },
+                                'pl-strade-prov': { color: '#000000', label: 'Strade Provinciali' },
+                                'pl-extraurbane': { color: '#8B4513', label: 'Strade Extraurbane' },
+                                'pl-centri-abitati': { color: '#ff9800', label: 'Centri Abitati' },
+                                'pl-grafo2026': { color: '#2ecc71', label: 'Grafo 2026' },
+                                'pl-low-traffic': { color: '#27ae60', label: 'Flussi Bassi' },
+                                'pl-high-traffic': { color: '#e74c3c', label: 'Flussi Elevati' },
+                                'pl-atac': { color: '#9b59b6', label: 'Linee ATAC' },
+                                'pl-tpl3': { color: '#3498db', label: 'Rete TPL 3+' },
+                                'pl-tpl5': { color: '#e67e22', label: 'Rete TPL 5+' },
+                                'pl-tpl5-no-pgtu': { color: '#e65100', label: 'TPL5 non in Annesso D' },
+                                'pl-pgtu-no-tpl5': { color: '#1565c0', label: 'Annesso D non in TPL5' },
+                                'pl-proposte-elim': { color: '#ff0000', label: 'Proposte Eliminazioni' },
+                                'pl-proposte-ins': { color: '#00cc00', label: 'Proposte Inserimenti' },
+                                'pl-disconnessioni': { color: '#c0392b', label: 'Disconnessioni Grafo' },
+                                'pl-disc-class': { color: '#1565c0', label: 'Disconnessioni Classif.' },
+                                'pl-disc-estrema': { color: '#b71c1c', label: 'Discontinuità Estreme' },
+                                'pl-frammenti': { color: '#e67e22', label: 'Strade Frammentate' }
+                            };
+                            Object.keys(legendColors).forEach(function(id) {
+                                if (document.getElementById(id).checked) {
+                                    legendItems.push(legendColors[id]);
+                                }
+                            });
+
+                            if (legendItems.length > 0) {
+                                var legFontSize = Math.round(pixH * 0.012);
+                                var legLineH = Math.round(legFontSize * 1.8);
+                                var legPad = Math.round(legFontSize * 0.8);
+                                var legW = Math.round(pixW * 0.18);
+                                var legH = legPad * 2 + legendItems.length * legLineH + legLineH;
+                                var legX = pixW - legW - Math.round(pixW * 0.015);
+                                var legY = headerH + Math.round(pixH * 0.015);
+
+                                ctx.fillStyle = 'rgba(255,255,255,0.92)';
+                                ctx.strokeStyle = '#999';
+                                ctx.lineWidth = 1;
+                                ctx.fillRect(legX, legY, legW, legH);
+                                ctx.strokeRect(legX, legY, legW, legH);
+
+                                ctx.fillStyle = '#333';
+                                ctx.font = 'bold ' + Math.round(legFontSize * 1.1) + 'px sans-serif';
+                                ctx.textBaseline = 'top';
+                                ctx.fillText('Legenda', legX + legPad, legY + legPad);
+
+                                legendItems.forEach(function(item, i) {
+                                    var iy = legY + legPad + legLineH + i * legLineH;
+                                    ctx.fillStyle = item.color;
+                                    ctx.fillRect(legX + legPad, iy + Math.round(legFontSize * 0.2), Math.round(legFontSize * 1.5), Math.round(legFontSize * 0.5));
+                                    ctx.fillStyle = '#333';
+                                    ctx.font = legFontSize + 'px sans-serif';
+                                    ctx.fillText(item.label, legX + legPad + Math.round(legFontSize * 2), iy);
+                                });
+                            }
+
+                            finalCanvas.toBlob(function(blob) {
+                                var url = URL.createObjectURL(blob);
+                                var a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'PGTU_Mappa_Completa_' + formatSel.toUpperCase() + '.png';
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+
+                                restoreFullMapState();
+                                callback(true);
+                            }, 'image/png');
+                        }).catch(function(err) {
+                            console.error('Print full map error:', err);
+                            restoreFullMapState();
+                            callback(null);
+                        });
+                    }, 1500);
+                }, 500);
+
+                function restoreFullMapState() {
+                    if (sidebar) sidebar.style.display = origSidebarDisplay;
+                    document.querySelectorAll('.leaflet-control-container').forEach(function(el) {
+                        el.style.display = el._origDisplay || '';
+                    });
+
+                    mapContainer.style.width = origWidth;
+                    mapContainer.style.height = origHeight;
+                    mapContainer.style.position = '';
+                    mapContainer.style.left = '';
+                    mapContainer.style.top = '';
+                    map.invalidateSize();
+                    map.setView(origCenter, origZoom, { animate: false });
+
+                    Object.keys(wantedLayers).forEach(function(id) {
+                        var info = wantedLayers[id];
+                        if (!info.layer) return;
+                        if (savedStates[id] && !map.hasLayer(info.layer)) {
+                            map.addLayer(info.layer);
+                        } else if (!savedStates[id] && map.hasLayer(info.layer)) {
+                            map.removeLayer(info.layer);
+                        }
+                    });
+
+                    if (origMunicipioHighlight) {
+                        setOverlayGrayscale(true);
+                        updateMunicipioHighlight(origMunicipioHighlight);
+                        layerMunicipii.eachLayer(function(l) {
+                            var num = l.feature.properties.Numero || l.feature.properties.Attuale || '';
+                            if (String(num) === String(origMunicipioHighlight)) {
+                                l.setStyle(highlightMunicipiStyle);
+                            } else {
+                                l.setStyle(dimmedMunicipiStyle);
+                            }
+                        });
+                    } else {
+                        setOverlayGrayscale(false);
+                        updateMunicipioHighlight(null);
+                        layerMunicipii.eachLayer(function(l) {
+                            l.setStyle(defaultMunicipiStyle);
+                        });
+                    }
+                }
+            }
+
+            // Generate full map button
+            btnFull.addEventListener('click', function() {
+                progressDiv.style.display = 'block';
+                progressText.textContent = 'Generazione mappa completa...';
+                progressFill.style.width = '30%';
+                btnGenerate.disabled = true;
+                btnAll.disabled = true;
+                btnFull.disabled = true;
+
+                setTimeout(function() {
+                    generateFullImage(function(result) {
+                        progressFill.style.width = '100%';
+                        if (result) {
+                            progressText.textContent = 'Mappa completa generata con successo!';
+                        } else {
+                            progressText.textContent = 'Errore nella generazione.';
+                        }
+                        btnGenerate.disabled = false;
+                        btnAll.disabled = false;
+                        btnFull.disabled = false;
+                        setTimeout(function() { progressDiv.style.display = 'none'; progressFill.style.width = '0%'; }, 2000);
+                    });
+                }, 100);
+            });
+
+            // Generate single municipio or full map
             btnGenerate.addEventListener('click', function() {
                 var mun = printMunicipioSel.value;
                 if (!mun) { alert('Seleziona un municipio.'); return; }
+
+                // If "all" is selected, generate full map
+                if (mun === 'all') {
+                    btnFull.click();
+                    return;
+                }
 
                 progressDiv.style.display = 'block';
                 progressText.textContent = 'Generazione immagine per ' + getMunicipioName(mun) + '...';
                 progressFill.style.width = '30%';
                 btnGenerate.disabled = true;
                 btnAll.disabled = true;
+                btnFull.disabled = true;
 
                 setTimeout(function() {
                     generateImage(mun, function(result) {
@@ -6844,6 +7132,7 @@
                         }
                         btnGenerate.disabled = false;
                         btnAll.disabled = false;
+                        btnFull.disabled = false;
                         setTimeout(function() { progressDiv.style.display = 'none'; progressFill.style.width = '0%'; }, 2000);
                     });
                 }, 100);
@@ -6863,6 +7152,7 @@
                 progressDiv.style.display = 'block';
                 btnGenerate.disabled = true;
                 btnAll.disabled = true;
+                btnFull.disabled = true;
                 var idx = 0;
 
                 function next() {
@@ -6871,6 +7161,7 @@
                         progressFill.style.width = '100%';
                         btnGenerate.disabled = false;
                         btnAll.disabled = false;
+                        btnFull.disabled = false;
                         setTimeout(function() { progressDiv.style.display = 'none'; progressFill.style.width = '0%'; }, 3000);
                         return;
                     }
