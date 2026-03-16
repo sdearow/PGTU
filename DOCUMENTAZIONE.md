@@ -25,10 +25,13 @@
 17. [Gestione Proposte Esistenti](#17-gestione-proposte-esistenti)
 18. [Export e Import](#18-export-e-import)
 19. [Generazione Report](#19-generazione-report)
-20. [Struttura Dati delle Proposte](#20-struttura-dati-delle-proposte)
-21. [Scorciatoie da Tastiera](#21-scorciatoie-da-tastiera)
-22. [Dipendenze Esterne](#22-dipendenze-esterne)
-23. [Limitazioni Note](#23-limitazioni-note)
+20. [Grafo 2026 - Layer Editabile](#20-grafo-2026---layer-editabile)
+21. [Analisi di Rete - Disconnessioni e Discontinuità](#21-analisi-di-rete---disconnessioni-e-discontinuità)
+22. [Esporta/Importa Layer](#22-esportaimporta-layer)
+23. [Struttura Dati delle Proposte](#23-struttura-dati-delle-proposte)
+24. [Scorciatoie da Tastiera](#24-scorciatoie-da-tastiera)
+25. [Dipendenze Esterne](#25-dipendenze-esterne)
+26. [Limitazioni Note](#26-limitazioni-note)
 
 ---
 
@@ -40,11 +43,15 @@ L'applicazione consente di:
 
 - **Visualizzare** la rete stradale PGTU con classificazione funzionale
 - **Analizzare** i flussi di traffico giornalieri (bassi ed elevati) da dati TomTom
-- **Consultare** le linee del trasporto pubblico ATAC
+- **Consultare** le linee del trasporto pubblico ATAC e la rete TPL con sovrapposizioni
+- **Visualizzare** strade extraurbane, provinciali e centri abitati
 - **Creare proposte** di eliminazione o inserimento di archi stradali nella rete
 - **Disegnare** nuovi archi stradali direttamente sulla mappa
-- **Generare report** dettagliati per municipio con mappe e statistiche
-- **Esportare** le proposte in formato JSON, GeoJSON o Shapefile per l'uso in QGIS
+- **Editare il Grafo 2026**: layer editabile che combina Annesso D + proposte
+- **Analizzare la rete**: rilevamento automatico di disconnessioni e discontinuità di classificazione
+- **Identificare mismatch**: confronto tra rete TPL 5+ e Annesso D
+- **Generare report** dettagliati per municipio in HTML, Word ed Excel
+- **Esportare** le proposte e i singoli layer in formato JSON, GeoJSON, Shapefile o ZIP
 
 L'applicazione è interamente client-side: non richiede un server backend e funziona aprendo il file `index.html` in un browser moderno. I dati delle proposte vengono salvati nel `localStorage` del browser.
 
@@ -58,8 +65,16 @@ PGTU/
 ├── data_tabella1.js                        # Dati tabellari flussi bassi per municipio
 ├── data_tabella2.js                        # Dati tabellari flussi elevati per municipio
 ├── data_proposte.js                        # File template per proposte (non utilizzato attivamente)
+├── data_disconnessioni.js                  # Dati disconnessioni di rete pre-calcolate
+├── data_centri_abitati.js                  # Perimetrazione centri abitati (~1.8 MB)
+├── data_rete_tpl_3.js                      # Rete TPL sovrapposizione 3+ linee bus (~1.6 MB)
+├── data_rete_tpl_5.js                      # Rete TPL sovrapposizione 5+ linee bus (~868 KB)
+├── data_strade_provinciali.js              # Strade provinciali (~3.0 MB)
+├── data_extraurbane.js                     # Strade extraurbane (~412 KB)
+├── intersezioni.geojson                    # Intersezioni stradali (354 KB)
 ├── convert_excel_to_js.py                  # Script Python per convertire Excel → JS
 ├── ATAC_FEB25_LINE.shp                     # Shapefile originale linee ATAC (Feb 2025)
+├── Strade_Extraurbane.gpkg                 # GeoPackage strade extraurbane (612 KB)
 │
 └── Mappe Proposte_130224/                  # Dati geospaziali (export QGIS del 13/02/2024)
     ├── Tabella 1/                          # Rete principale (flussi bassi)
@@ -94,14 +109,20 @@ PGTU/
 
 | File | Dimensione | Descrizione |
 |------|-----------|-------------|
-| `index.html` | ~3000 righe | App completa: HTML + CSS + JavaScript |
+| `index.html` | ~5700 righe | App completa: HTML + CSS + JavaScript |
 | `Municipi_1.js` | ~1 MB | GeoJSON confini 15 municipi di Roma |
 | `PGTUAnnessoD_5.js` | ~3.9 MB | GeoJSON rete stradale PGTU (Annesso D) |
 | `FlussiTomTomflussi_tomtom_3.js` | ~2 MB | GeoJSON flussi bassi (Tabella 1) |
 | `FlussiTomTomflussi_tomtom_2.js` | ~1.5 MB | GeoJSON flussi elevati (Tabella 2) |
 | `LineeATAC_4.js` | ~4 MB | GeoJSON linee ATAC (caricamento lazy) |
-| `data_tabella1.js` | ~200 KB | Dati Excel Tab 1 convertiti in JS |
+| `data_tabella1.js` | ~90 KB | Dati Excel Tab 1 convertiti in JS |
 | `data_tabella2.js` | ~150 KB | Dati Excel Tab 2 convertiti in JS |
+| `data_strade_provinciali.js` | ~3.0 MB | GeoJSON strade provinciali |
+| `data_extraurbane.js` | ~412 KB | GeoJSON strade extraurbane |
+| `data_centri_abitati.js` | ~1.8 MB | GeoJSON perimetrazione centri abitati |
+| `data_rete_tpl_3.js` | ~1.6 MB | GeoJSON rete TPL sovrapposizione 3+ linee |
+| `data_rete_tpl_5.js` | ~868 KB | GeoJSON rete TPL sovrapposizione 5+ linee |
+| `data_disconnessioni.js` | ~9.4 KB | GeoJSON disconnessioni di rete pre-calcolate |
 
 ---
 
@@ -115,6 +136,8 @@ PGTU/
 - **Geocoding**: OpenStreetMap Nominatim API
 - **Persistenza**: localStorage del browser
 - **Export Shapefile**: shp-write 0.3.2 (caricato on-demand da CDN)
+- **Export Excel**: SheetJS (xlsx 0.20.3, caricato on-demand da CDN)
+- **Export ZIP**: JSZip 3.10.1 (caricato on-demand da CDN)
 
 ### Flusso dati
 
@@ -133,10 +156,15 @@ Azioni utente       →  Oggetti proposta      →  localStorage
 
 ### Persistenza
 
-Le proposte vengono salvate nel `localStorage` del browser con la chiave:
-```
-pgtu_proposte_manual
-```
+I dati vengono salvati nel `localStorage` del browser con le seguenti chiavi:
+
+| Chiave | Contenuto |
+|--------|-----------|
+| `pgtu_proposte_manual` | Proposte di eliminazione e inserimento |
+| `pgtu_grafo_2026` | Archi del Grafo 2026 (rete editabile) |
+| `pgtu_resolved_disc` | Disconnessioni di rete risolte/ignorate |
+| `pgtu_resolved_disc_class` | Discontinuità di classificazione risolte |
+| `pgtu_resolved_disc_estrema` | Discontinuità estreme risolte |
 
 **Attenzione**: I dati vengono persi se si cancella la cache del browser. Usare la funzione di esportazione per fare backup regolari.
 
@@ -209,7 +237,54 @@ Strade fuori dalla rete principale con flussi elevati.
   - `Az_Linea`: Azienda operatrice
   - `Attivo`: Stato attivo (TRUE/FALSE)
 
-### 4.6 Dati Tabellari (`data_tabella1.js`, `data_tabella2.js`)
+### 4.6 Strade Provinciali (`data_strade_provinciali.js`)
+
+- **Formato**: GeoJSON FeatureCollection
+- **Geometria**: LineString / MultiLineString
+- **Dimensione**: ~3.0 MB
+- **Proprietà principali**:
+  - `Nome`: Nome della strada provinciale
+  - `Codice`: Codice identificativo della strada provinciale
+- **Filtraggio**: I segmenti vengono filtrati spazialmente per mostrare solo quelli all'interno dei confini dei Municipi di Roma
+
+### 4.7 Strade Extraurbane (`data_extraurbane.js`)
+
+- **Formato**: GeoJSON FeatureCollection
+- **Geometria**: LineString / MultiLineString
+- **Dimensione**: ~412 KB
+- **Proprietà principali**:
+  - `Toponomastica` / `Nome`: Nome della strada
+  - `Classificazione`: Classificazione funzionale
+  - `Limiti`: Limiti di velocità
+  - `Municipio`: Numero municipio
+  - `Grande_Viabilità_2019`: Flag grande viabilità
+  - `TPL`: Trasporto pubblico locale
+  - `Note_2025`: Note aggiornate al 2025
+
+### 4.8 Centri Abitati (`data_centri_abitati.js`)
+
+- **Formato**: GeoJSON FeatureCollection
+- **Geometria**: LineString (convertiti in Polygon per la visualizzazione)
+- **Dimensione**: ~1.8 MB
+- **Descrizione**: Perimetrazione dei centri abitati di Roma utilizzata come riferimento per la classificazione stradale
+
+### 4.9 Rete TPL - Sovrapposizione 3+ linee (`data_rete_tpl_3.js`)
+
+- **Formato**: GeoJSON FeatureCollection
+- **Geometria**: LineString / MultiLineString
+- **Dimensione**: ~1.6 MB
+- **Descrizione**: Segmenti stradali su cui transitano 3 o più linee di trasporto pubblico ATAC
+- **Proprietà principali**:
+  - Numero di linee sovrapposte (utilizzato per la colorazione per fasce)
+
+### 4.10 Rete TPL - Sovrapposizione 5+ linee (`data_rete_tpl_5.js`)
+
+- **Formato**: GeoJSON FeatureCollection
+- **Geometria**: LineString / MultiLineString
+- **Dimensione**: ~868 KB
+- **Descrizione**: Segmenti stradali su cui transitano 5 o più linee di trasporto pubblico ATAC
+
+### 4.11 Dati Tabellari (`data_tabella1.js`, `data_tabella2.js`)
 
 Struttura JavaScript organizzata per municipio:
 
@@ -298,9 +373,10 @@ Il pannello di controllo a destra contiene tutte le funzionalità organizzate in
 
 ## 6. Layer della Mappa
 
-### 6.1 Layer base: OpenStreetMap
+### 6.1 Layer base: OpenStreetMap (scala di grigi)
 
 - Tile server: `https://tile.openstreetmap.org/{z}/{x}/{y}.png`
+- **Filtro CSS**: Scala di grigi (brightness 0.85) per migliorare la leggibilità dei layer tematici
 - Centro iniziale: Roma (41.9028, 12.4964)
 - Zoom iniziale: 11
 - Attribuzione: © OpenStreetMap contributors
@@ -325,6 +401,7 @@ Il pannello di controllo a destra contiene tutte le funzionalità organizzate in
 | IQ | Interquartiere | Ciano | `#27f1ff` |
 | Q | Quartiere | Arancione | `#ff9400` |
 | IZ | Interzonali | Giallo | `#e4ff00` |
+| EX | Extraurbana | Marrone | `#8B4513` |
 
 - **Spessore**: 2.5px, linea continua
 - **Click**: Mostra popup con nome, classificazione, limiti, codice, municipio, note
@@ -371,28 +448,109 @@ Il pannello di controllo a destra contiene tutte le funzionalità organizzate in
 - **Spessore**: 1.5px, opacità 0.7
 - **Click**: Mostra sigla linea, nome percorso, lunghezza, fermate, operatore
 
-### 6.7 Proposte Eliminazione
+### 6.7 Strade Extraurbane
+
+- **Toggle**: `☐ Strade Extraurbane` (disattivo di default)
+- **Colore**: Marrone `#8B4513`
+- **Spessore**: 3px, opacità 0.8
+- **Dati**: `data_extraurbane.js`
+- **Click**: Mostra popup con nome, denominazione, classificazione, limiti, municipio, grande viabilità, TPL, note
+
+### 6.8 Strade Provinciali
+
+- **Toggle**: `☐ Strade Provinciali` (disattivo di default)
+- **Colore**: Verde `#008000`
+- **Spessore**: 2.5px, opacità 0.7
+- **Dati**: `data_strade_provinciali.js`
+- **Filtraggio**: Segmenti filtrati spazialmente all'interno dei confini dei Municipi
+- **Click**: Mostra popup con nome e codice
+
+### 6.9 Centri Abitati
+
+- **Toggle**: `☐ Centri Abitati` (disattivo di default)
+- **Colore**: Viola scuro `#4A0E4E`
+- **Spessore**: 2px, opacità 0.8
+- **Posizionamento**: Pane di sfondo (dietro tutti gli altri layer)
+- **Dati**: `data_centri_abitati.js`
+- **Geometria**: LineString convertiti in Polygon per la visualizzazione
+
+### 6.10 Rete TPL (3+ linee)
+
+- **Toggle**: `☐ Rete TPL 3+` (disattivo di default)
+- **Dati**: `data_rete_tpl_3.js`
+- **Scala colori per fasce**:
+
+| Fasce linee | Colore | Hex |
+|-------------|--------|-----|
+| 3-4 linee | Giallo | `#fdd835` |
+| 5-6 linee | Arancione | `#ff9800` |
+| 7-9 linee | Rosso | `#f44336` |
+| 10-14 linee | Viola | `#9c27b0` |
+| 15+ linee | Blu scuro | `#1a237e` |
+
+- **Spessore**: 3.5px, opacità 0.85, estremità arrotondate
+
+### 6.11 Rete TPL (5+ linee)
+
+- **Toggle**: `☐ Rete TPL 5+` (disattivo di default)
+- **Dati**: `data_rete_tpl_5.js`
+- **Scala colori**: Identica alla Rete TPL 3+ (vedi tabella sopra)
+- **Spessore**: 3.5px, opacità 0.85, estremità arrotondate
+
+### 6.12 TPL 5+ non in Annesso D (Mismatch)
+
+- **Toggle**: `☐ TPL 5+ non in Annesso D` (disattivo di default)
+- **Colore**: Arancione scuro `#e65100`
+- **Stile**: Linea tratteggiata (dashArray 8,4), spessore 4px, opacità 0.85
+- **Contatore**: Mostra il numero di segmenti trovati
+- **Descrizione**: Evidenzia i segmenti con 5+ linee TPL che non sono presenti nell'Annesso D della rete PGTU
+
+### 6.13 Annesso D non in TPL 5+ (Mismatch)
+
+- **Toggle**: `☐ Annesso D non in TPL 5+` (disattivo di default)
+- **Colore**: Blu medio `#1565c0`
+- **Stile**: Linea tratteggiata (dashArray 8,4), spessore 4px, opacità 0.85
+- **Contatore**: Mostra il numero di segmenti trovati
+- **Descrizione**: Evidenzia i segmenti dell'Annesso D che non sono coperti da 5+ linee TPL
+
+### 6.14 Grafo 2026
+
+- **Toggle**: `☑ Grafo 2026` (vedi [sezione 20](#20-grafo-2026---layer-editabile) per dettagli completi)
+- **Colori**: Stessi colori della classificazione stradale (incluso EX marrone)
+- **Descrizione**: Layer editabile che combina l'Annesso D con le proposte di modifica
+
+### 6.15 Disconnessioni e Discontinuità
+
+- Vedi [sezione 21](#21-analisi-di-rete---disconnessioni-e-discontinuità) per dettagli completi sui layer di analisi di rete
+
+### 6.16 Proposte Eliminazione
 
 - **Toggle**: `☑ Proposte Elim.` (attivo di default)
 - **Linee**: Tratteggiate (dash 12,8), spessore 8px, opacità 0.9
   - Colore: rosso `#e74c3c` oppure colore della classificazione se impostata
 - **Punti**: Cerchio 9px, bordo 3px, riempimento 0.7 opacità, sempre rosso
 
-### 6.8 Proposte Inserimento
+### 6.17 Proposte Inserimento
 
 - **Toggle**: `☑ Proposte Ins.` (attivo di default)
 - **Linee**: Tratteggiate (dash 12,8), spessore 8px, opacità 0.9
-  - Colore: verde `#006400` oppure colore della classificazione se impostata
+  - Colore: verde scuro `#006400` oppure colore della classificazione se impostata
 - **Punti**: Cerchio 9px, bordo 3px, riempimento 0.7 opacità, sempre verde
 
 ### Ordine Z dei layer (dal fronte al fondo)
 
 1. Proposte Inserimento (sempre in primo piano)
 2. Proposte Eliminazione
-3. Rete PGTU
-4. Flussi Bassi / Flussi Elevati
-5. Linee ATAC
-6. Confini Municipi (sempre sul fondo)
+3. Disconnessioni / Discontinuità (marker circolari)
+4. Grafo 2026
+5. Rete PGTU
+6. Flussi Bassi / Flussi Elevati
+7. TPL Mismatch layers
+8. Rete TPL 3+ / 5+
+9. Strade Extraurbane / Strade Provinciali
+10. Linee ATAC
+11. Centri Abitati (pane di sfondo)
+12. Confini Municipi (sempre sul fondo)
 
 ---
 
@@ -717,6 +875,19 @@ Il modale si presenta in modi diversi a seconda del contesto:
 | IQ | Interquartiere | Ciano | `#27f1ff` |
 | Q | Quartiere | Arancione | `#ff9400` |
 | IZ | Interzonali | Giallo | `#e4ff00` |
+| EX | Extraurbana | Marrone | `#8B4513` |
+
+### Gerarchia classificazione
+
+Per l'analisi delle discontinuità, le classificazioni seguono una gerarchia:
+
+| Livello | Codice | Nome |
+|---------|--------|------|
+| 0 | A | Autostrade |
+| 1 | S | Scorrimento |
+| 2 | IQ | Interquartiere |
+| 3 | Q | Quartiere |
+| 4 | IZ | Interzonali |
 
 ### Comportamento
 
@@ -807,7 +978,32 @@ Il contatore si aggiorna automaticamente a ogni modifica.
   - Vengono assegnati **nuovi ID** per evitare conflitti
   - Messaggio di conferma con numero di proposte importate
 
-### 18.5 Cancella Tutto
+### 18.5 Esporta Report Word
+
+- **Pulsante**: "Report Word"
+- **Formato**: File Microsoft Word (.doc)
+- **Nome file**: `report_pgtu_YYYY-MM-DD.doc`
+- **Contenuto**:
+  - Pagina di copertina con data e ora di generazione
+  - Proposte di Eliminazione raggruppate per municipio
+  - Proposte di Inserimento raggruppate per municipio
+  - Elenco completo archi Grafo 2026 per municipio con:
+    - Conteggio archi e km totali per municipio
+    - Tabella con: # | Nome Strada | Classificazione | Km | Municipio | Note
+- **Stile**: Font Calibri 11pt, tabelle formattate con intestazioni
+
+### 18.6 Esporta Report Excel
+
+- **Pulsante**: "Report Excel"
+- **Formato**: File Excel (.xlsx)
+- **Nome file**: `report_pgtu_YYYY-MM-DD.xlsx`
+- **Libreria**: SheetJS (xlsx 0.20.3, caricata on-demand da CDN)
+- **Fogli generati**:
+  - Foglio copertina con statistiche riepilogative
+  - Un foglio per municipio con dati Grafo 2026
+  - Ogni foglio contiene: intestazione con nome municipio, conteggio archi, km totali, e tabella dettagliata
+
+### 18.7 Cancella Tutto
 
 - **Pulsante**: "Cancella"
 - **Comportamento**: Chiede conferma → elimina TUTTE le proposte dal localStorage
@@ -941,7 +1137,163 @@ I conteggi nelle card di riepilogo considerano le **strade uniche**:
 
 ---
 
-## 20. Struttura Dati delle Proposte
+## 20. Grafo 2026 - Layer Editabile
+
+### Panoramica
+
+Il Grafo 2026 è un layer editabile che rappresenta la rete stradale proposta per il 2026. Viene generato combinando automaticamente l'Annesso D attuale con tutte le proposte di modifica (eliminazioni e inserimenti).
+
+### Attivazione
+
+- **Toggle**: Checkbox `Grafo 2026` nella sezione "Rete Stradale Principale" del pannello di controllo
+- **Persistenza**: Le modifiche vengono salvate nel `localStorage` con chiave `pgtu_grafo_2026`
+
+### Funzionalità
+
+1. **Generazione automatica**: Unisce l'Annesso D con le proposte correnti:
+   - Rimuove gli archi presenti nelle proposte di eliminazione
+   - Aggiunge gli archi delle proposte di inserimento
+2. **Disegno archi**: Pulsante "Disegna Arco" per aggiungere nuovi archi direttamente nel Grafo 2026
+   - Click sulla mappa per posizionare vertici
+   - Doppio-click per terminare il disegno
+   - **Esc** per annullare il disegno in corso
+3. **Modifica classificazione**: Click su un arco del Grafo 2026 per cambiarne la classificazione tramite popup
+4. **Modifica nome strada**: Possibilità di modificare il nome della strada direttamente dal popup
+5. **Export GeoJSON**: Pulsante per esportare il Grafo 2026 completo in formato GeoJSON
+6. **Reset**: Pulsante per ripristinare il Grafo 2026 allo stato iniziale (Annesso D + proposte)
+
+### Colori
+
+Stessi colori della classificazione stradale (A nero, S blu, IQ ciano, Q arancione, IZ giallo, EX marrone).
+
+### Sincronizzazione con Proposte
+
+Le modifiche alle proposte (aggiunta, eliminazione, modifica) vengono sincronizzate automaticamente nel Grafo 2026.
+
+---
+
+## 21. Analisi di Rete - Disconnessioni e Discontinuità
+
+### Panoramica
+
+L'applicazione include strumenti di analisi automatica della rete stradale per identificare problemi di connettività e coerenza nella classificazione.
+
+### 21.1 Disconnessioni Grafo
+
+- **Toggle**: Checkbox `Disconnessioni` (etichetta rossa) nel pannello di controllo
+- **Contatore**: Mostra il numero di punti di disconnessione trovati
+- **Pulsante Reset**: Ripristina le disconnessioni precedentemente risolte/ignorate
+
+**Funzionamento**:
+1. Estrae tutti gli endpoint degli archi del Grafo 2026
+2. Costruisce una griglia spaziale con celle di dimensione 2×SNAP
+3. Identifica gli endpoint senza endpoint vicini entro la tolleranza
+4. Mostra marker circolari nei punti di disconnessione
+
+**Parametri**:
+- **Tolleranza SNAP**: 0.000225 gradi (~25 metri)
+- **Metodo**: Controllo distanza endpoint-a-segmento (non solo endpoint-a-endpoint)
+
+**Stile marker**:
+- Raggio: 6px
+- Colore riempimento: Verde `#27ae60`
+- Contorno: Blu scuro `#0d47a1`
+- Opacità: 0.9
+
+**Interazione**: Click su un marker per visualizzare dettagli e opzione per ignorarlo/risolverlo.
+
+### 21.2 Discontinuità Classificazione
+
+- **Toggle**: Checkbox `Disc. Classificazione` (etichetta blu) nel pannello di controllo
+- **Contatore**: Mostra il numero di discontinuità trovate
+- **Pulsante Reset**: Ripristina le discontinuità risolte
+
+**Funzionamento**: Identifica le intersezioni dove strade adiacenti hanno classificazioni incompatibili (es. una strada A che si collega direttamente a una Q senza passare per S e IQ).
+
+**Stile marker**:
+- Raggio: 6px
+- Colore riempimento: Blu `#1565c0`
+- Contorno: Blu scuro `#0d47a1`
+- Opacità: 0.9
+
+### 21.3 Discontinuità Estreme
+
+- **Toggle**: Checkbox `Disc. Estreme` (etichetta rosso scuro) nel pannello di controllo
+- **Contatore**: Mostra il numero di discontinuità estreme trovate
+- **Pulsante Reset**: Ripristina le discontinuità estreme risolte
+
+**Funzionamento**: Evidenzia le intersezioni dove la classificazione stradale salta 2 o più livelli gerarchici. Ad esempio, una strada di classificazione A che si collega direttamente a una Q (saltando S e IQ).
+
+**Stile marker**:
+- Raggio: 6px
+- Colore riempimento: Rosso scuro `#b71c1c`
+- Contorno: Blu scuro `#0d47a1`
+- Opacità: 0.9
+
+### Ricalcolo
+
+Le analisi vengono ricalcolate automaticamente quando il Grafo 2026 o le proposte vengono modificati.
+
+---
+
+## 22. Esporta/Importa Layer
+
+### 22.1 Esporta Layer Individuali
+
+Sezione "Esporta Layer" nel pannello di controllo. Ogni layer può essere esportato individualmente in formato GeoJSON.
+
+**Layer esportabili**:
+
+| Layer | Descrizione |
+|-------|-------------|
+| Municipi | Confini dei 15 municipi |
+| PGTU - Annesso D | Rete stradale PGTU originale |
+| PGTU - Grafo 2026 | Rete stradale proposta 2026 |
+| Strade Provinciali | Strade provinciali filtrate |
+| Strade Extraurbane | Strade extraurbane |
+| Flussi Bassi (Tab. 1) | Flussi di traffico bassi |
+| Flussi Elevati (Tab. 2) | Flussi di traffico elevati |
+| Linee ATAC | Linee trasporto pubblico |
+| Rete TPL (3+ linee) | Sovrapposizione 3+ linee bus |
+| Rete TPL (5+ linee) | Sovrapposizione 5+ linee bus |
+| Proposte | Proposte eliminazione + inserimento |
+| TPL 5+ non in Annesso D | Segmenti mismatch TPL→PGTU |
+| Annesso D non in TPL 5+ | Segmenti mismatch PGTU→TPL |
+| Disconnessioni Grafo | Punti di disconnessione rete |
+| Disc. Classificazione | Discontinuità classificazione |
+| Centri Abitati | Perimetrazione centri abitati |
+
+### 22.2 Esporta Tutti i Layer (ZIP)
+
+- **Pulsante**: "Esporta Tutti"
+- **Formato**: File ZIP contenente tutti i layer come file GeoJSON individuali
+- **Libreria**: JSZip 3.10.1 (caricata on-demand da CDN)
+
+### 22.3 Importa Layer
+
+- **Sezione**: "Importa Layer" nel pannello di controllo
+- **Formato accettato**: GeoJSON (.geojson, .json)
+- **Selezione**: Dropdown per scegliere il layer da sovrascrivere
+
+**Layer importabili**:
+- PGTU - Annesso D
+- Strade Provinciali
+- Strade Extraurbane
+- Centri Abitati
+- Rete TPL (3+ linee)
+- Rete TPL (5+ linee)
+- Disconnessioni Grafo
+- Disconnessioni Classificazione
+
+**Comportamento**:
+- Il file GeoJSON viene validato prima dell'importazione
+- Il layer selezionato viene **sovrarscritto** completamente con i dati importati
+- I layer dipendenti (disconnessioni, mismatch) vengono ricalcolati automaticamente
+- Messaggio di conferma con il numero di feature importate
+
+---
+
+## 23. Struttura Dati delle Proposte
 
 ### Oggetto proposta completo
 
@@ -1009,17 +1361,18 @@ I conteggi nelle card di riepilogo considerano le **strade uniche**:
 
 ---
 
-## 21. Scorciatoie da Tastiera
+## 24. Scorciatoie da Tastiera
 
 | Tasto | Contesto | Azione |
 |-------|----------|--------|
 | **Esc** | Modale aperto | Chiude il modale |
-| **Esc** | Disegno linea in corso | Annulla il disegno (rimuove vertici) |
+| **Esc** | Disegno linea proposte in corso | Annulla il disegno (rimuove vertici) |
+| **Esc** | Disegno arco Grafo 2026 in corso | Annulla il disegno |
 | **Esc** | Modalità edit attiva | Disattiva la modalità edit |
 
 ---
 
-## 22. Dipendenze Esterne
+## 25. Dipendenze Esterne
 
 ### Librerie caricate all'avvio
 
@@ -1033,6 +1386,8 @@ I conteggi nelle card di riepilogo considerano le **strade uniche**:
 | Libreria | Versione | Fonte | Utilizzo |
 |----------|---------|-------|----------|
 | shp-write | 0.3.2 | unpkg CDN | Export Shapefile (caricata al primo click su "Esporta SHP") |
+| SheetJS (xlsx) | 0.20.3 | cdn.sheetjs.com | Export report Excel (.xlsx) |
+| JSZip | 3.10.1 | cdnjs.cloudflare.com | Export tutti i layer come file ZIP |
 
 ### API esterne
 
@@ -1047,13 +1402,19 @@ I conteggi nelle card di riepilogo considerano le **strade uniche**:
 - `PGTUAnnessoD_5.js` - Rete stradale PGTU
 - `FlussiTomTomflussi_tomtom_3.js` - Flussi bassi
 - `FlussiTomTomflussi_tomtom_2.js` - Flussi elevati
-- `LineeATAC_4.js` - Linee ATAC
+- `LineeATAC_4.js` - Linee ATAC (caricamento lazy)
 - `data_tabella1.js` - Dati tabellari Tab 1
 - `data_tabella2.js` - Dati tabellari Tab 2
+- `data_strade_provinciali.js` - Strade provinciali
+- `data_extraurbane.js` - Strade extraurbane
+- `data_centri_abitati.js` - Centri abitati
+- `data_rete_tpl_3.js` - Rete TPL sovrapposizione 3+ linee
+- `data_rete_tpl_5.js` - Rete TPL sovrapposizione 5+ linee
+- `data_disconnessioni.js` - Disconnessioni di rete
 
 ---
 
-## 23. Limitazioni Note
+## 26. Limitazioni Note
 
 ### Persistenza dati
 - Le proposte sono salvate nel **localStorage del browser**
@@ -1062,9 +1423,10 @@ I conteggi nelle card di riepilogo considerano le **strade uniche**:
 - **Raccomandazione**: esportare regolarmente in JSON o GeoJSON come backup
 
 ### Prestazioni
-- I file GeoJSON sono di grandi dimensioni (~12 MB totali)
+- I file GeoJSON sono di grandi dimensioni (~15 MB totali con i nuovi layer)
 - Il caricamento iniziale può richiedere alcuni secondi
 - Il layer ATAC viene caricato in modo lazy per non rallentare il caricamento
+- Il ricalcolo delle disconnessioni può richiedere qualche secondo su reti estese
 
 ### Compatibilità browser
 - Richiede un browser moderno con supporto ES5+, Canvas, localStorage
@@ -1080,10 +1442,16 @@ I conteggi nelle card di riepilogo considerano le **strade uniche**:
 - La generazione delle immagini mappa richiede connessione internet (caricamento tile OSM)
 - Il file HTML generato può essere di grandi dimensioni se ci sono molti municipi (immagini PNG inline)
 - Le immagini sono a risoluzione fissa 860×400px
+- L'export Word ed Excel richiedono connessione internet per il caricamento delle librerie (SheetJS)
 
 ### Multi-utente
 - L'applicazione è mono-utente (nessun sistema di login o collaborazione)
 - Per condividere le proposte, usare la funzione Export/Import JSON
+
+### Analisi di rete
+- La tolleranza di snap per le disconnessioni è fissa a ~25 metri (0.000225 gradi)
+- Il rilevamento delle discontinuità si basa sulla gerarchia A > S > IQ > Q > IZ; la classificazione EX non è inclusa nella gerarchia
+- Le disconnessioni risolte/ignorate vengono salvate nel localStorage e possono essere resettate
 
 ---
 
