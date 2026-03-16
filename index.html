@@ -757,14 +757,25 @@
                     <label for="toggle-strade-prov">Strade Provinciali</label>
                 </div>
                 <div class="legend-block" id="legend-strade-prov" style="display:none;">
-                    <div class="legend-item"><span class="legend-line" style="background:#008000"></span> Strade Provinciali</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#000000"></span> Strade Provinciali</div>
                 </div>
                 <div class="layer-toggle">
                     <input type="checkbox" id="toggle-extraurbane">
                     <label for="toggle-extraurbane">Strade Extraurbane</label>
                 </div>
                 <div class="legend-block" id="legend-extraurbane" style="display:none;">
-                    <div class="legend-item"><span class="legend-line" style="background:#8B4513"></span> Strade Extraurbane (EX)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#8B4513"></span> Comune di Roma (EX / class.)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#000000"></span> Altro Ente</div>
+                    <div style="margin-top:6px;font-size:11px;color:#666;">
+                        <em>Clicca un arco per modificare classe/ente. Usa "Disegna" per aggiungere nuovi archi.</em>
+                    </div>
+                    <div style="margin-top:4px;">
+                        <button id="btn-extraurbane-draw" class="edit-btn edit-btn-ins" style="font-size:11px;padding:4px 10px;margin:2px;">&#9998; Disegna Arco</button>
+                        <button id="btn-extraurbane-export" class="edit-action-btn" style="font-size:11px;padding:4px 10px;margin:2px;background:#27ae60;color:white;">Esporta GeoJSON</button>
+                    </div>
+                    <div id="extraurbane-draw-instructions" style="display:none;font-size:11px;color:#8B4513;margin-top:4px;">
+                        Clicca sulla mappa per aggiungere vertici. Doppio-clic per terminare.
+                    </div>
                 </div>
                 <div class="layer-toggle">
                     <input type="checkbox" id="toggle-centri-abitati">
@@ -810,6 +821,15 @@
                     <label for="toggle-disc-estrema" style="font-weight:600;color:#b71c1c;">&#9679; Discontinuit&agrave; Estreme</label>
                     <span id="disc-estrema-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
                     <button id="btn-reset-disc-estrema" style="font-size:10px;margin-left:6px;padding:1px 6px;cursor:pointer;border:1px solid #ccc;border-radius:3px;background:#fff;color:#888;" title="Ripristina tutti i punti risolti">Reset</button>
+                </div>
+                <div class="layer-toggle" style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
+                    <input type="checkbox" id="toggle-frammenti">
+                    <label for="toggle-frammenti" style="font-weight:600;color:#e67e22;">&#9679; Strade Frammentate (3+)</label>
+                    <span id="frammenti-count" style="font-size:11px;color:#888;margin-left:4px;"></span>
+                </div>
+                <div class="legend-block" id="legend-frammenti" style="display:none;">
+                    <div class="legend-item"><span class="legend-line" style="background:#e67e22;height:4px;"></span> Strade con 3+ frammenti (da unificare)</div>
+                    <div style="font-size:10px;color:#888;margin-top:2px;">Strade nel Grafo 2026 che hanno 3 o pi&ugrave; archi separati con lo stesso nome.</div>
                 </div>
             </div>
 
@@ -961,6 +981,7 @@
                     <button class="edit-action-btn btn-export-layer" data-layer="disconnessioni" style="font-size:11px;padding:4px 8px;text-align:left;">Disconnessioni Grafo</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="disc-classificazione" style="font-size:11px;padding:4px 8px;text-align:left;">Disconnessioni Classificazione</button>
                     <button class="edit-action-btn btn-export-layer" data-layer="centri-abitati" style="font-size:11px;padding:4px 8px;text-align:left;">Centri Abitati</button>
+                    <button class="edit-action-btn btn-export-layer" data-layer="frammenti" style="font-size:11px;padding:4px 8px;text-align:left;">Strade Frammentate (3+)</button>
                 </div>
                 <div style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
                     <button class="edit-action-btn" id="btn-export-all-layers" style="font-size:12px;padding:6px 10px;background:#2c3e50;color:white;font-weight:600;width:100%;">Scarica Tutti i Layer (ZIP)</button>
@@ -1369,7 +1390,7 @@
                 layerStradeProvinciali = L.geoJSON(filteredStrade, {
                     style: function() {
                         return {
-                            color: '#008000',
+                            color: '#000000',
                             weight: 2.5,
                             opacity: 0.7,
                             lineCap: 'round',
@@ -1379,7 +1400,7 @@
                     onEachFeature: function(feature, layer) {
                         var p = feature.properties;
                         var html = '<table class="popup-table">';
-                        html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#008000;color:white;">Strada Provinciale</th></tr>';
+                        html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#000000;color:white;">Strada Provinciale</th></tr>';
                         if (p.name) html += '<tr><td><strong>Nome</strong></td><td>' + p.name + '</td></tr>';
                         if (p.codice) html += '<tr><td><strong>Codice</strong></td><td>' + p.codice + '</td></tr>';
                         html += '</table>';
@@ -1409,41 +1430,156 @@
             }
         }
 
-        // Strade Extraurbane layer (off by default)
-        var layerExtraurbane = null;
+        // Strade Extraurbane layer (editable, off by default)
+        var EXTRAURBANE_KEY = 'pgtu_extraurbane_edits';
+        var layerExtraurbane = L.layerGroup();
+        var extraurbaneFeatures = null;
         var extraurbaneLoaded = false;
+        var extraurbaneDrawMode = false;
+        var extraurbaneDrawPoints = [];
+        var extraurbaneDrawMarkers = [];
+        var extraurbaneDrawLines = [];
+        var extraurbanePreviewLine = null;
+
+        function loadExtraurbane() {
+            if (extraurbaneFeatures) return extraurbaneFeatures;
+            try {
+                var data = localStorage.getItem(EXTRAURBANE_KEY);
+                if (data) { extraurbaneFeatures = JSON.parse(data); return extraurbaneFeatures; }
+            } catch(e) {}
+            return null;
+        }
+
+        function saveExtraurbane(features) {
+            extraurbaneFeatures = features;
+            try { localStorage.setItem(EXTRAURBANE_KEY, JSON.stringify(features)); } catch(e) {}
+        }
+
+        function buildInitialExtraurbane() {
+            var features = [];
+            if (typeof dataExtraurbane !== 'undefined') {
+                (dataExtraurbane.features || []).forEach(function(f, idx) {
+                    features.push({
+                        id: 'ex_' + idx,
+                        name: f.properties.Toponomastica || f.properties.Nome || '',
+                        denominazione: f.properties.Nome || '',
+                        classifica: f.properties.Classifica || 'EX',
+                        ente: 'Comune di Roma',
+                        limiti: f.properties.Limiti || '',
+                        municipio: f.properties.Municipio || '',
+                        grande_via: f.properties['Grande_Viabilità_2019'] || '',
+                        tpl: f.properties.TPL || '',
+                        note: f.properties.Note_2025 || '',
+                        source: 'Dato originale',
+                        geometry: f.geometry
+                    });
+                });
+            }
+            return features;
+        }
+
+        function extraurbaneColor(f) {
+            if (f.ente && f.ente !== 'Comune di Roma') return '#000000';
+            var cl = f.classifica || 'EX';
+            return classificaColors[cl] || '#8B4513';
+        }
+
+        function renderExtraurbane() {
+            layerExtraurbane.clearLayers();
+            var features = loadExtraurbane();
+            if (!features) { features = buildInitialExtraurbane(); saveExtraurbane(features); }
+            features.forEach(function(f) {
+                if (!f.geometry) return;
+                var color = extraurbaneColor(f);
+                var geoLayer = L.geoJSON(f.geometry, {
+                    style: function() { return { color: color, weight: 3, opacity: 0.8, lineCap: 'round', lineJoin: 'round' }; }
+                });
+                var cfName = classificaNames[f.classifica] || f.classifica || 'N/D';
+                var html = '<div class="popup-title">' + (f.name || 'Arco senza nome') + '</div>';
+                html += '<span class="popup-layer-badge" style="background:#8B4513;">Extraurbana</span>';
+                html += '<table class="popup-table">';
+                html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:' + color + ';color:white;">Strada Extraurbana</th></tr>';
+                html += popupRow('Classificazione', cfName + (f.classifica ? ' (' + f.classifica + ')' : ''));
+                html += popupRow('Ente Competente', f.ente || 'N/D');
+                if (f.denominazione) html += popupRow('Denominazione', f.denominazione);
+                if (f.limiti) html += popupRow('Limiti', f.limiti);
+                if (f.municipio && f.municipio !== '-') html += popupRow('Municipio', f.municipio);
+                if (f.grande_via) html += popupRow('Grande Viabilit\u00e0', f.grande_via);
+                if (f.tpl) html += popupRow('TPL', f.tpl);
+                if (f.note && f.note !== '-') html += popupRow('Note', f.note);
+                html += popupRow('Fonte', f.source || '');
+                html += '</table>';
+                html += '<div style="margin-top:8px">';
+                html += '<button class="popup-btn popup-btn-edit" onclick="window._extraurbaneEdit(\'' + f.id + '\')">Modifica</button>';
+                html += '<button class="popup-btn popup-btn-delete" onclick="window._extraurbaneDelete(\'' + f.id + '\')">Elimina</button>';
+                html += '</div>';
+                geoLayer.bindPopup(html, { maxWidth: 380 });
+                layerExtraurbane.addLayer(geoLayer);
+            });
+        }
+
         function ensureExtraurbaneLayer() {
             if (extraurbaneLoaded) return;
             extraurbaneLoaded = true;
-            if (typeof dataExtraurbane !== 'undefined') {
-                layerExtraurbane = L.geoJSON(dataExtraurbane, {
-                    style: function() {
-                        return {
-                            color: '#8B4513',
-                            weight: 3,
-                            opacity: 0.8,
-                            lineCap: 'round',
-                            lineJoin: 'round'
-                        };
-                    },
-                    onEachFeature: function(feature, layer) {
-                        var p = feature.properties;
-                        var html = '<table class="popup-table">';
-                        html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#8B4513;color:white;">Strada Extraurbana</th></tr>';
-                        if (p.Toponomastica) html += '<tr><td><strong>Nome</strong></td><td>' + p.Toponomastica + '</td></tr>';
-                        if (p.Nome) html += '<tr><td><strong>Denominazione</strong></td><td>' + p.Nome + '</td></tr>';
-                        if (p.Classifica) html += '<tr><td><strong>Classificazione</strong></td><td>' + p.Classifica + '</td></tr>';
-                        if (p.Limiti) html += '<tr><td><strong>Limiti</strong></td><td>' + p.Limiti + '</td></tr>';
-                        if (p.Municipio && p.Municipio !== '-') html += '<tr><td><strong>Municipio</strong></td><td>' + p.Municipio + '</td></tr>';
-                        if (p['Grande_Viabilità_2019']) html += '<tr><td><strong>Grande Viabilit&agrave;</strong></td><td>' + p['Grande_Viabilità_2019'] + '</td></tr>';
-                        if (p.TPL) html += '<tr><td><strong>TPL</strong></td><td>' + p.TPL + '</td></tr>';
-                        if (p.Note_2025 && p.Note_2025 !== '-') html += '<tr><td><strong>Note 2025</strong></td><td>' + p.Note_2025 + '</td></tr>';
-                        html += '</table>';
-                        layer.bindPopup(html, { maxWidth: 340 });
-                    }
-                });
-            }
+            renderExtraurbane();
         }
+
+        // Extraurbane edit modal - uses a custom prompt since we need ente + classificazione + note + name
+        window._extraurbaneEdit = function(id) {
+            var features = loadExtraurbane() || [];
+            var feature = null;
+            for (var i = 0; i < features.length; i++) { if (features[i].id === id) { feature = features[i]; break; } }
+            if (!feature) return;
+            map.closePopup();
+            // Build a mini-modal for ente competente selection
+            var enteOptions = ['Comune di Roma', 'Città Metropolitana', 'ANAS', 'Regione Lazio', 'Altro'];
+            var currentEnte = feature.ente || 'Comune di Roma';
+            var enteHtml = '<div style="margin-bottom:10px;"><label style="font-weight:600;font-size:12px;">Ente Competente:</label><br>';
+            enteHtml += '<select id="extraurbane-ente-select" style="width:100%;padding:6px;margin-top:4px;border:1px solid #ddd;border-radius:4px;">';
+            enteOptions.forEach(function(e) { enteHtml += '<option value="' + e + '"' + (e === currentEnte ? ' selected' : '') + '>' + e + '</option>'; });
+            enteHtml += '</select></div>';
+            // Inject ente field before the modal is shown, using the existing showNotesModal
+            showNotesModal('inserimento', feature.name || 'Arco', function(result) {
+                if (result.classificazione !== undefined) feature.classifica = result.classificazione;
+                if (result.streetName) feature.name = result.streetName;
+                feature.note = result.notes || feature.note;
+                // Read ente from injected select
+                var enteSelect = document.getElementById('extraurbane-ente-select');
+                if (enteSelect) feature.ente = enteSelect.value;
+                feature._edited = true;
+                saveExtraurbane(features);
+                renderExtraurbane();
+            }, feature.note || '', true, true, feature.classifica || 'EX', 'Modifica Strada Extraurbana');
+            // Inject ente field into modal after it opens
+            setTimeout(function() {
+                var classField = document.getElementById('modal-class-field');
+                if (classField) {
+                    var enteDiv = document.createElement('div');
+                    enteDiv.id = 'extraurbane-ente-wrapper';
+                    enteDiv.innerHTML = enteHtml;
+                    classField.parentNode.insertBefore(enteDiv, classField.nextSibling);
+                }
+            }, 60);
+        };
+
+        window._extraurbaneDelete = function(id) {
+            if (!confirm('Eliminare questa strada extraurbana?')) return;
+            var features = loadExtraurbane() || [];
+            features = features.filter(function(f) { return f.id !== id; });
+            saveExtraurbane(features);
+            map.closePopup();
+            renderExtraurbane();
+        };
+
+        // Clean up injected ente field when modal closes
+        var origModalSave = document.getElementById('modal-save');
+        var origModalCancel = document.getElementById('modal-cancel');
+        function cleanExtraurbaneEnte() {
+            var w = document.getElementById('extraurbane-ente-wrapper');
+            if (w) w.remove();
+        }
+        if (origModalSave) origModalSave.addEventListener('click', cleanExtraurbaneEnte);
+        if (origModalCancel) origModalCancel.addEventListener('click', cleanExtraurbaneEnte);
 
         var layerLowTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_3, {
             style: styleLowTraffic,
@@ -4030,18 +4166,116 @@
         document.getElementById('toggle-extraurbane').addEventListener('change', function() {
             if (this.checked) {
                 ensureExtraurbaneLayer();
-                if (layerExtraurbane) {
-                    map.addLayer(layerExtraurbane);
-                    // Extraurbane go behind traffic and PGTU layers
-                    if (map.hasLayer(layerLowTraffic)) layerLowTraffic.bringToFront();
-                    if (map.hasLayer(layerHighTraffic)) layerHighTraffic.bringToFront();
-                    if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
-                    bringProposteFront();
-                }
+                map.addLayer(layerExtraurbane);
+                if (map.hasLayer(layerLowTraffic)) layerLowTraffic.bringToFront();
+                if (map.hasLayer(layerHighTraffic)) layerHighTraffic.bringToFront();
+                if (map.hasLayer(layerPGTU)) layerPGTU.bringToFront();
+                bringProposteFront();
                 document.getElementById('legend-extraurbane').style.display = '';
             } else {
-                if (layerExtraurbane) map.removeLayer(layerExtraurbane);
+                map.removeLayer(layerExtraurbane);
                 document.getElementById('legend-extraurbane').style.display = 'none';
+                // Cancel draw mode if active
+                if (extraurbaneDrawMode) toggleExtraurbaneDrawMode();
+            }
+        });
+
+        // Extraurbane draw mode
+        function toggleExtraurbaneDrawMode() {
+            extraurbaneDrawMode = !extraurbaneDrawMode;
+            var btn = document.getElementById('btn-extraurbane-draw');
+            var instr = document.getElementById('extraurbane-draw-instructions');
+            if (extraurbaneDrawMode) {
+                btn.style.background = '#8B4513'; btn.style.color = 'white';
+                instr.style.display = '';
+                map.getContainer().style.cursor = 'crosshair';
+            } else {
+                btn.style.background = ''; btn.style.color = '';
+                instr.style.display = 'none';
+                map.getContainer().style.cursor = '';
+                cancelExtraurbaneDrawMode();
+            }
+        }
+        function cancelExtraurbaneDrawMode() {
+            extraurbaneDrawPoints = [];
+            extraurbaneDrawMarkers.forEach(function(m) { map.removeLayer(m); }); extraurbaneDrawMarkers = [];
+            extraurbaneDrawLines.forEach(function(l) { map.removeLayer(l); }); extraurbaneDrawLines = [];
+            if (extraurbanePreviewLine) { map.removeLayer(extraurbanePreviewLine); extraurbanePreviewLine = null; }
+        }
+        document.getElementById('btn-extraurbane-draw').addEventListener('click', toggleExtraurbaneDrawMode);
+        document.getElementById('btn-extraurbane-export').addEventListener('click', function() {
+            ensureExtraurbaneLayer();
+            var features = loadExtraurbane() || [];
+            var geoFeatures = features.map(function(f) {
+                return { type: 'Feature', properties: { nome: f.name, denominazione: f.denominazione || '', classifica: f.classifica, ente_competente: f.ente || '', limiti: f.limiti || '', municipio: f.municipio || '', grande_viabilita: f.grande_via || '', tpl: f.tpl || '', note: f.note || '', fonte: f.source || '' }, geometry: f.geometry };
+            });
+            var geojson = makeGeoJSON('Strade_Extraurbane', geoFeatures);
+            downloadGeoJSON(geojson, 'Strade_Extraurbane.geojson');
+        });
+
+        // Extraurbane draw clicks
+        map.on('click', function(e) {
+            if (!extraurbaneDrawMode) return;
+            var latlng = e.latlng;
+            extraurbaneDrawPoints.push([latlng.lng, latlng.lat]);
+            var marker = L.circleMarker(latlng, { radius: 4, color: '#8B4513', fillColor: '#8B4513', fillOpacity: 1 });
+            marker.addTo(map); extraurbaneDrawMarkers.push(marker);
+            if (extraurbaneDrawPoints.length > 1) {
+                var prev = extraurbaneDrawPoints[extraurbaneDrawPoints.length - 2];
+                var line = L.polyline([[prev[1], prev[0]], [latlng.lat, latlng.lng]], { color: '#8B4513', weight: 3, dashArray: '6,4' });
+                line.addTo(map); extraurbaneDrawLines.push(line);
+            }
+        });
+        map.on('dblclick', function(e) {
+            if (!extraurbaneDrawMode || extraurbaneDrawPoints.length < 2) return;
+            L.DomEvent.stopPropagation(e); L.DomEvent.preventDefault(e);
+            var coords = extraurbaneDrawPoints.slice();
+            cancelExtraurbaneDrawMode();
+            var km = 0;
+            for (var i = 1; i < coords.length; i++) { km += haversineDist(coords[i-1], coords[i]); }
+            // Show modal for new arc
+            var enteOptions = ['Comune di Roma', 'Città Metropolitana', 'ANAS', 'Regione Lazio', 'Altro'];
+            showNotesModal('inserimento', '', function(result) {
+                var features = loadExtraurbane() || buildInitialExtraurbane();
+                var enteSelect = document.getElementById('extraurbane-ente-select');
+                features.push({
+                    id: 'exd_' + Date.now().toString(36) + Math.random().toString(36).substr(2,4),
+                    name: result.streetName || 'Arco disegnato',
+                    denominazione: '',
+                    classifica: result.classificazione || 'EX',
+                    ente: enteSelect ? enteSelect.value : 'Comune di Roma',
+                    limiti: '',
+                    municipio: '',
+                    grande_via: '',
+                    tpl: '',
+                    note: result.notes || '',
+                    source: 'Disegno manuale',
+                    geometry: { type: 'LineString', coordinates: coords }
+                });
+                saveExtraurbane(features);
+                renderExtraurbane();
+            }, '', true, true, 'EX', 'Nuovo Arco Extraurbana (' + coords.length + ' vertici, ' + km.toFixed(2) + ' km)');
+            // Inject ente field
+            setTimeout(function() {
+                var classField = document.getElementById('modal-class-field');
+                if (classField) {
+                    var enteDiv = document.createElement('div');
+                    enteDiv.id = 'extraurbane-ente-wrapper';
+                    var enteHtml = '<div style="margin-bottom:10px;"><label style="font-weight:600;font-size:12px;">Ente Competente:</label><br>';
+                    enteHtml += '<select id="extraurbane-ente-select" style="width:100%;padding:6px;margin-top:4px;border:1px solid #ddd;border-radius:4px;">';
+                    enteOptions.forEach(function(e) { enteHtml += '<option value="' + e + '">' + e + '</option>'; });
+                    enteHtml += '</select></div>';
+                    enteDiv.innerHTML = enteHtml;
+                    classField.parentNode.insertBefore(enteDiv, classField.nextSibling);
+                }
+            }, 60);
+        });
+        // Extraurbane Esc to cancel draw
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && extraurbaneDrawMode) {
+                cancelExtraurbaneDrawMode();
+                // Don't toggle off, just clear points
+                if (extraurbaneDrawPoints.length === 0) toggleExtraurbaneDrawMode();
             }
         });
 
@@ -5246,6 +5480,64 @@
             }
         });
 
+        // =====================================================
+        // STRADE FRAMMENTATE (3+ fragments with same name)
+        // =====================================================
+        var layerFrammenti = L.layerGroup();
+        var frammentiComputed = false;
+
+        function computeFrammenti() {
+            layerFrammenti.clearLayers();
+            var features = loadGrafo();
+            if (!features) { features = buildInitialGrafo(); }
+            // Group by normalized name
+            var byName = {};
+            features.forEach(function(f) {
+                if (!f.name || !f.geometry) return;
+                var key = f.name.trim().toLowerCase();
+                if (!key) return;
+                if (!byName[key]) byName[key] = [];
+                byName[key].push(f);
+            });
+            var count = 0;
+            Object.keys(byName).forEach(function(key) {
+                var group = byName[key];
+                if (group.length < 3) return;
+                count++;
+                group.forEach(function(f) {
+                    var geoLayer = L.geoJSON(f.geometry, {
+                        style: function() {
+                            return { color: '#e67e22', weight: 6, opacity: 0.75, dashArray: '10,6', lineCap: 'round', lineJoin: 'round' };
+                        }
+                    });
+                    var html = '<div class="popup-title">' + (f.name || '') + '</div>';
+                    html += '<span class="popup-layer-badge" style="background:#e67e22;">Strada Frammentata</span>';
+                    html += '<table class="popup-table">';
+                    html += popupRow('Frammenti totali', group.length + ' archi con questo nome');
+                    html += popupRow('Classificazione', f.classifica || 'N/D');
+                    html += popupRow('Municipio', f.municipio || 'N/D');
+                    html += popupRow('Fonte', f.source || '');
+                    html += '</table>';
+                    geoLayer.bindPopup(html, { maxWidth: 340 });
+                    layerFrammenti.addLayer(geoLayer);
+                });
+            });
+            document.getElementById('frammenti-count').textContent = '(' + count + ' strade)';
+            frammentiComputed = true;
+        }
+
+        document.getElementById('toggle-frammenti').addEventListener('change', function() {
+            if (this.checked) {
+                computeFrammenti();
+                map.addLayer(layerFrammenti);
+                layerFrammenti.bringToFront();
+                document.getElementById('legend-frammenti').style.display = '';
+            } else {
+                map.removeLayer(layerFrammenti);
+                document.getElementById('legend-frammenti').style.display = 'none';
+            }
+        });
+
         // Draw button
         document.getElementById('btn-grafo-draw').addEventListener('click', function() {
             toggleGrafo2026Draw();
@@ -5321,7 +5613,10 @@
                     var filteredSP = filterStradeInsideMunicipi(typeof json_StradeProvinciali !== 'undefined' ? json_StradeProvinciali : {});
                     return makeGeoJSON('Strade_Provinciali', filteredSP.features || []);
                 case 'extraurbane':
-                    return makeGeoJSON('Strade_Extraurbane', (typeof dataExtraurbane !== 'undefined' ? dataExtraurbane : {}).features || []);
+                    var exFeats = (loadExtraurbane() || []).map(function(f) {
+                        return { type: 'Feature', properties: { nome: f.name, denominazione: f.denominazione || '', classifica: f.classifica, ente_competente: f.ente || '', limiti: f.limiti || '', municipio: f.municipio || '', grande_viabilita: f.grande_via || '', tpl: f.tpl || '', note: f.note || '', fonte: f.source || '' }, geometry: f.geometry };
+                    });
+                    return makeGeoJSON('Strade_Extraurbane', exFeats);
                 case 'flussi-bassi':
                     return makeGeoJSON('Flussi_Bassi_Tab1', (json_FlussiTomTomflussi_tomtom_3 || {}).features || []);
                 case 'flussi-elevati':
@@ -5378,6 +5673,25 @@
                     return makeGeoJSON('Disconnessioni_Classificazione', dcFeats);
                 case 'centri-abitati':
                     return makeGeoJSON('Centri_Abitati', (typeof dataCentriAbitati !== 'undefined' ? dataCentriAbitati : {}).features || []);
+                case 'frammenti':
+                    var framFeats = [];
+                    var gFeats = loadGrafo() || buildInitialGrafo();
+                    var byNameFr = {};
+                    gFeats.forEach(function(f) {
+                        if (!f.name || !f.geometry) return;
+                        var key = f.name.trim().toLowerCase();
+                        if (!key) return;
+                        if (!byNameFr[key]) byNameFr[key] = [];
+                        byNameFr[key].push(f);
+                    });
+                    Object.keys(byNameFr).forEach(function(key) {
+                        var group = byNameFr[key];
+                        if (group.length < 3) return;
+                        group.forEach(function(f) {
+                            framFeats.push({ type: 'Feature', properties: { nome: f.name, classifica: f.classifica, municipio: f.municipio, fonte: f.source, frammenti: group.length }, geometry: f.geometry });
+                        });
+                    });
+                    return makeGeoJSON('Strade_Frammentate_3plus', framFeats);
                 default:
                     return null;
             }
