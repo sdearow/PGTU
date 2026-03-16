@@ -2802,7 +2802,8 @@
                 for (var tx = tileX0; tx <= tileX1; tx++) {
                     for (var ty = tileY0; ty <= tileY1; ty++) {
                         (function(tx, ty) {
-                            var url = 'https://a.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
+                            var s = ['a','b','c'][(tx + ty) % 3];
+                            var url = 'https://' + s + '.tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
                             tilePromises.push(loadTileImage(url).then(function(img) {
                                 return { img: img, tx: tx, ty: ty };
                             }));
@@ -2811,7 +2812,8 @@
                 }
 
                 Promise.all(tilePromises).then(function(tiles) {
-                    // Draw tiles
+                    // Draw tiles with B&W filter
+                    ctx.filter = 'saturate(0) contrast(1.3)';
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -2822,6 +2824,7 @@
                         var dh = 256 * scaleF;
                         ctx.drawImage(t.img, dx, dy, dw, dh);
                     });
+                    ctx.filter = 'none';
 
                     // Draw municipio boundary
                     if (munGeom) {
@@ -6632,14 +6635,17 @@
                 var loaded = 0;
                 var subdomains = ['a', 'b', 'c'];
 
-                var subdomainsCarto = ['a', 'b', 'c', 'd'];
+                var subdomains = ['a', 'b', 'c'];
+
+                // Apply B&W filter like the live map
+                ctx.filter = 'saturate(0) contrast(1.3)';
 
                 for (var tx = tileXmin; tx <= tileXmax; tx++) {
                     for (var ty = tileYmin; ty <= tileYmax; ty++) {
-                        if (ty < 0 || ty >= n) { loaded++; if (loaded >= totalTiles) { callback(); } continue; }
+                        if (ty < 0 || ty >= n) { loaded++; if (loaded >= totalTiles) { ctx.filter = 'none'; callback(); } continue; }
                         var txx = ((tx % n) + n) % n;
                         (function(tx2, ty2, txx2) {
-                            var s = subdomainsCarto[(txx2 + ty2) % 4];
+                            var s = subdomains[(txx2 + ty2) % 3];
                             var img = new Image();
                             img.crossOrigin = 'anonymous';
                             img.onload = function() {
@@ -6647,17 +6653,17 @@
                                 var dy = ty2 * 256 - originY;
                                 ctx.drawImage(img, Math.round(dx), Math.round(dy), 256, 256);
                                 loaded++;
-                                if (loaded >= totalTiles) { callback(); }
+                                if (loaded >= totalTiles) { ctx.filter = 'none'; callback(); }
                             };
                             img.onerror = function() {
                                 loaded++;
-                                if (loaded >= totalTiles) { callback(); }
+                                if (loaded >= totalTiles) { ctx.filter = 'none'; callback(); }
                             };
-                            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + txx2 + '/' + ty2 + '.png';
+                            img.src = 'https://' + s + '.tile.openstreetmap.org/' + zoom + '/' + txx2 + '/' + ty2 + '.png';
                         })(tx, ty, txx);
                     }
                 }
-                if (totalTiles === 0) { callback(); }
+                if (totalTiles === 0) { ctx.filter = 'none'; callback(); }
             }
 
             // Draw a single GeoJSON geometry on canvas
@@ -6685,7 +6691,14 @@
                     ctx.globalAlpha = style.opacity != null ? style.opacity : 1;
                     ctx.lineCap = style.lineCap || 'round';
                     ctx.lineJoin = style.lineJoin || 'round';
+                    if (style.dashArray) {
+                        var dashes = style.dashArray.split(',').map(function(v) { return parseFloat(v.trim()); });
+                        ctx.setLineDash(dashes);
+                    } else {
+                        ctx.setLineDash([]);
+                    }
                     ctx.stroke();
+                    ctx.setLineDash([]);
                     ctx.globalAlpha = 1;
                 }
 
@@ -6747,7 +6760,7 @@
                                 style = { color: sub.options.color, weight: sub.options.weight, opacity: sub.options.opacity,
                                           fillColor: sub.options.fillColor, fillOpacity: sub.options.fillOpacity,
                                           lineCap: sub.options.lineCap, lineJoin: sub.options.lineJoin,
-                                          radius: sub.options.radius };
+                                          radius: sub.options.radius, dashArray: sub.options.dashArray };
                             }
                             result.push({ geom: sub.feature.geometry, style: style });
                         } else {
@@ -6937,7 +6950,7 @@
                 ctx.font = footerFontSize + 'px sans-serif';
                 ctx.textBaseline = 'middle';
                 var dateStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: CARTO Positron / OpenStreetMap',
+                ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: OpenStreetMap',
                     Math.round(footerH * 0.3), pixH - Math.round(footerH * 0.5));
 
                 return { headerH: headerH, footerH: footerH };
@@ -7024,18 +7037,53 @@
                 mapCtx.fillRect(0, 0, pixW, mapH);
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
-                    // Draw municipio boundaries
+                    // Build clip path for selected municipio
+                    var munLayer = getMunicipioLayer(municipioNum);
+                    var munGeom = munLayer ? munLayer.feature.geometry : null;
+
+                    function buildMunClipPath(ctx2) {
+                        if (!munGeom) return;
+                        ctx2.beginPath();
+                        var rings = [];
+                        if (munGeom.type === 'Polygon') rings = munGeom.coordinates;
+                        else if (munGeom.type === 'MultiPolygon') munGeom.coordinates.forEach(function(p) { rings = rings.concat(p); });
+                        rings.forEach(function(ring) {
+                            for (var i = 0; i < ring.length; i++) {
+                                var pt = latLngToCanvasPt(ring[i][1], ring[i][0], zoom, originX, originY);
+                                if (i === 0) ctx2.moveTo(pt.x, pt.y);
+                                else ctx2.lineTo(pt.x, pt.y);
+                            }
+                            ctx2.closePath();
+                        });
+                    }
+
+                    // 1) Draw all layers in grayscale + faded (outside effect)
+                    mapCtx.save();
+                    mapCtx.filter = 'grayscale(1) opacity(0.35)';
+                    drawLayers(mapCtx, zoom, originX, originY);
+                    mapCtx.restore();
+
+                    // 2) Clip to municipio and redraw layers in full color (inside)
+                    mapCtx.save();
+                    buildMunClipPath(mapCtx);
+                    mapCtx.clip();
+                    drawLayers(mapCtx, zoom, originX, originY);
+                    mapCtx.restore();
+
+                    // 3) Draw other municipio boundaries (dimmed)
                     layerMunicipii.eachLayer(function(l) {
                         var num = l.feature.properties.Numero || l.feature.properties.Attuale || '';
-                        var isCurrent = String(num) === String(municipioNum);
-                        var style = isCurrent
-                            ? { color: '#e74c3c', weight: 3, opacity: 1, fillColor: '#e74c3c', fillOpacity: 0.02, fill: true }
-                            : { color: '#666', weight: 1, opacity: 0.3, fill: false };
-                        drawGeometry(mapCtx, l.feature.geometry, zoom, originX, originY, style);
+                        if (String(num) !== String(municipioNum)) {
+                            drawGeometry(mapCtx, l.feature.geometry, zoom, originX, originY,
+                                { color: '#999', weight: 1, opacity: 0.3, fill: false });
+                        }
                     });
 
-                    // Draw selected layers
-                    drawLayers(mapCtx, zoom, originX, originY);
+                    // 4) Draw selected municipio border prominently on top
+                    if (munGeom) {
+                        drawGeometry(mapCtx, munGeom, zoom, originX, originY,
+                            { color: '#c0392b', weight: 5, opacity: 1, fill: false });
+                    }
 
                     // Assemble final canvas
                     var finalCanvas = document.createElement('canvas');
@@ -7089,14 +7137,14 @@
                 mapCtx.fillRect(0, 0, pixW, mapH);
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
-                    // Draw all municipality boundaries
-                    layerMunicipii.eachLayer(function(l) {
-                        drawGeometry(mapCtx, l.feature.geometry, zoom, originX, originY,
-                            { color: '#333', weight: 2, opacity: 0.8, fillColor: '#333', fillOpacity: 0.02, fill: true });
-                    });
-
                     // Draw selected layers
                     drawLayers(mapCtx, zoom, originX, originY);
+
+                    // Draw all municipality boundaries on top
+                    layerMunicipii.eachLayer(function(l) {
+                        drawGeometry(mapCtx, l.feature.geometry, zoom, originX, originY,
+                            { color: '#2c3e50', weight: 3, opacity: 0.9, fill: false });
+                    });
 
                     // Assemble final canvas
                     var finalCanvas = document.createElement('canvas');
