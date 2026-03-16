@@ -1190,8 +1190,8 @@
             fillColor: 'rgba(0,121,255,0.15)', fillOpacity: 0.15
         };
         var highlightMunicipiStyle = {
-            color: '#0050aa', weight: 3.5,
-            fillColor: '#0079ff', fillOpacity: 0.30
+            color: '#003d80', weight: 5,
+            fillColor: '#0079ff', fillOpacity: 0.18
         };
         var dimmedMunicipiStyle = {
             color: 'rgba(0,0,0,0.15)', weight: 1,
@@ -4046,8 +4046,29 @@
                                 pane: 'highlightPane',
                                 interactive: false
                             };
-                            var clone = L.geoJSON(layer.feature, { style: function() { return style; } });
-                            municipioHighlightGroup.addLayer(clone);
+                            var geomType = layer.feature.geometry.type;
+                            // Clip lines at the municipio boundary
+                            if (geomType === 'LineString') {
+                                var clipped = clipLineToPolygon(layer.feature.geometry.coordinates, poly);
+                                clipped.forEach(function(segCoords) {
+                                    var feat = { type: 'Feature', geometry: { type: 'LineString', coordinates: segCoords }, properties: {} };
+                                    var clone = L.geoJSON(feat, { style: function() { return style; } });
+                                    municipioHighlightGroup.addLayer(clone);
+                                });
+                            } else if (geomType === 'MultiLineString') {
+                                layer.feature.geometry.coordinates.forEach(function(lineCoords) {
+                                    var clipped = clipLineToPolygon(lineCoords, poly);
+                                    clipped.forEach(function(segCoords) {
+                                        var feat = { type: 'Feature', geometry: { type: 'LineString', coordinates: segCoords }, properties: {} };
+                                        var clone = L.geoJSON(feat, { style: function() { return style; } });
+                                        municipioHighlightGroup.addLayer(clone);
+                                    });
+                                });
+                            } else {
+                                // For polygons and other types, clone as-is
+                                var clone = L.geoJSON(layer.feature, { style: function() { return style; } });
+                                municipioHighlightGroup.addLayer(clone);
+                            }
                         }
                     }
                 };
@@ -4101,6 +4122,50 @@
                 overlayPane.style.filter = '';
                 bgPane.style.filter = '';
             }
+        }
+
+        // --- Clip line geometries to the municipio polygon boundary ---
+        // For each LineString, keep only the portions inside the polygon.
+        function clipLineToPolygon(coords, poly) {
+            var segments = [];
+            var current = [];
+            for (var i = 0; i < coords.length; i++) {
+                var inside = turf.booleanPointInPolygon(turf.point(coords[i]), poly);
+                if (inside) {
+                    // If transitioning from outside to inside, approximate boundary crossing
+                    if (current.length === 0 && i > 0) {
+                        var approx = interpolateBorderPoint(coords[i - 1], coords[i], poly);
+                        if (approx) current.push(approx);
+                    }
+                    current.push(coords[i]);
+                } else {
+                    if (current.length > 0) {
+                        // Transitioning from inside to outside, approximate crossing
+                        var approx = interpolateBorderPoint(coords[i], coords[i - 1], poly);
+                        if (approx) current.push(approx);
+                        if (current.length >= 2) segments.push(current);
+                        current = [];
+                    }
+                }
+            }
+            if (current.length >= 2) segments.push(current);
+            return segments;
+        }
+
+        // Binary-search for the approximate point where a segment crosses the polygon boundary
+        function interpolateBorderPoint(outsidePt, insidePt, poly) {
+            var ax = outsidePt[0], ay = outsidePt[1];
+            var bx = insidePt[0], by = insidePt[1];
+            // 5 iterations of binary search gives ~3% accuracy on the segment
+            for (var j = 0; j < 5; j++) {
+                var mx = (ax + bx) / 2, my = (ay + by) / 2;
+                if (turf.booleanPointInPolygon(turf.point([mx, my]), poly)) {
+                    bx = mx; by = my;
+                } else {
+                    ax = mx; ay = my;
+                }
+            }
+            return [(ax + bx) / 2, (ay + by) / 2];
         }
 
         select.addEventListener('change', function() {
