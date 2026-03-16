@@ -1529,12 +1529,20 @@
         }
 
         // Extraurbane edit modal - uses a custom prompt since we need ente + classificazione + note + name
+        // Helper to clean up injected ente field
+        function cleanExtraurbaneEnte() {
+            var w = document.getElementById('extraurbane-ente-wrapper');
+            if (w) w.remove();
+        }
+
         window._extraurbaneEdit = function(id) {
             var features = loadExtraurbane() || [];
             var feature = null;
             for (var i = 0; i < features.length; i++) { if (features[i].id === id) { feature = features[i]; break; } }
             if (!feature) return;
             map.closePopup();
+            // Clean up any leftover ente field from a previous edit
+            cleanExtraurbaneEnte();
             // Build a mini-modal for ente competente selection
             var enteOptions = ['Comune di Roma', 'Città Metropolitana', 'ANAS', 'Regione Lazio', 'Altro'];
             var currentEnte = feature.ente || 'Comune di Roma';
@@ -1544,12 +1552,16 @@
             enteHtml += '</select></div>';
             // Inject ente field before the modal is shown, using the existing showNotesModal
             showNotesModal('inserimento', feature.name || 'Arco', function(result) {
+                // Read ente FIRST, before any cleanup removes the DOM element
+                var enteSelect = document.getElementById('extraurbane-ente-select');
+                var enteValue = enteSelect ? enteSelect.value : feature.ente;
+                // Now clean up the injected ente field
+                cleanExtraurbaneEnte();
+                // Apply changes
                 if (result.classificazione !== undefined) feature.classifica = result.classificazione;
                 if (result.streetName) feature.name = result.streetName;
                 feature.note = result.notes || feature.note;
-                // Read ente from injected select
-                var enteSelect = document.getElementById('extraurbane-ente-select');
-                if (enteSelect) feature.ente = enteSelect.value;
+                feature.ente = enteValue;
                 feature._edited = true;
                 saveExtraurbane(features);
                 renderExtraurbane();
@@ -1574,16 +1586,6 @@
             map.closePopup();
             renderExtraurbane();
         };
-
-        // Clean up injected ente field when modal closes
-        var origModalSave = document.getElementById('modal-save');
-        var origModalCancel = document.getElementById('modal-cancel');
-        function cleanExtraurbaneEnte() {
-            var w = document.getElementById('extraurbane-ente-wrapper');
-            if (w) w.remove();
-        }
-        if (origModalSave) origModalSave.addEventListener('click', cleanExtraurbaneEnte);
-        if (origModalCancel) origModalCancel.addEventListener('click', cleanExtraurbaneEnte);
 
         var layerLowTraffic = L.geoJSON(json_FlussiTomTomflussi_tomtom_3, {
             style: styleLowTraffic,
@@ -1983,12 +1985,14 @@
         document.getElementById('modal-cancel').addEventListener('click', function() {
             modalOverlay.classList.remove('visible');
             modalCallback = null;
+            cleanExtraurbaneEnte();
         });
 
         modalOverlay.addEventListener('click', function(e) {
             if (e.target === modalOverlay) {
                 modalOverlay.classList.remove('visible');
                 modalCallback = null;
+                cleanExtraurbaneEnte();
             }
         });
 
