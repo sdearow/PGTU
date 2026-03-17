@@ -3153,8 +3153,8 @@
             h += '*, *::before, *::after { box-sizing: border-box; }';
             h += 'body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f5f6fa; color: #333; }';
             h += '.report-container { max-width: 900px; margin: 0 auto; padding: 30px 24px; }';
-            h += '.report-header { text-align: center; padding: 30px 0 20px; border-bottom: 3px solid #2c3e50; margin-bottom: 30px; }';
-            h += '.report-header h1 { font-size: 24px; color: #2c3e50; margin: 0 0 6px; }';
+            h += '.report-header { text-align: center; padding: 30px 0 20px; border-bottom: 3px solid #8B0000; margin-bottom: 30px; }';
+            h += '.report-header h1 { font-size: 24px; color: #8B0000; margin: 0 0 6px; }';
             h += '.report-header .subtitle { font-size: 14px; color: #666; }';
             h += '.report-header .date { font-size: 13px; color: #888; margin-top: 4px; }';
             h += '.summary-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 30px; justify-content: center; }';
@@ -3162,7 +3162,7 @@
             h += '.summary-card .val { font-size: 28px; font-weight: 700; }';
             h += '.summary-card .lbl { font-size: 11px; color: #888; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }';
             h += '.mun-section { background: white; border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); margin-bottom: 24px; overflow: hidden; page-break-inside: avoid; }';
-            h += '.mun-header { background: #2c3e50; color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }';
+            h += '.mun-header { background: #8B0000; color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }';
             h += '.mun-header h2 { margin: 0; font-size: 17px; font-weight: 600; }';
             h += '.mun-header .mun-counts { display: flex; gap: 12px; font-size: 12px; }';
             h += '.mun-header .mun-counts span { padding: 2px 8px; border-radius: 3px; }';
@@ -3195,8 +3195,8 @@
             h += '.notes-box[contenteditable] { cursor: text; min-height: 20px; }';
             h += '.report-toolbar { position: fixed; bottom: 20px; right: 20px; display: flex; gap: 8px; z-index: 100; }';
             h += '.report-toolbar button { padding: 10px 18px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }';
-            h += '.btn-print { background: #2c3e50; color: white; }';
-            h += '.btn-print:hover { background: #1a252f; }';
+            h += '.btn-print { background: #8B0000; color: white; }';
+            h += '.btn-print:hover { background: #5a0000; }';
             h += '.edit-hint { text-align: center; font-size: 12px; color: #888; margin-bottom: 20px; padding: 8px 16px; background: #fffde7; border: 1px dashed #ffc107; border-radius: 6px; }';
             h += '.edit-hint strong { color: #f57c00; }';
             h += '.btn-delete-row { background: none; border: none; color: #ccc; cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; line-height: 1; }';
@@ -3303,7 +3303,7 @@
 
             // Advanced stats section
             h += '<div class="mun-section">';
-            h += '<div class="mun-header" style="background:#1a252f;"><h2>Statistiche Avanzate</h2></div>';
+            h += '<div class="mun-header" style="background:#5a0000;"><h2>Statistiche Avanzate</h2></div>';
             h += '<div class="sub-section">';
 
             // Total km cards
@@ -3316,7 +3316,7 @@
             // Classification distribution table
             var classKeys = Object.keys(allClassDist).sort();
             if (classKeys.length > 0) {
-                h += '<h3 style="font-size:14px;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid #2c3e50;color:#2c3e50;">Distribuzione per Classificazione Stradale</h3>';
+                h += '<h3 style="font-size:14px;margin:0 0 10px;padding-bottom:6px;border-bottom:2px solid #8B0000;color:#8B0000;">Distribuzione per Classificazione Stradale</h3>';
                 h += '<table class="prop-table">';
                 h += '<tr><th>Classificazione</th><th>Codice</th><th>Proposte</th><th>Km Totali</th><th>Km Elim.</th><th>Km Inserim.</th><th>% sul Totale</th></tr>';
                 classKeys.forEach(function(cf) {
@@ -3338,7 +3338,7 @@
             }
 
             // Per-municipio km distribution table
-            h += '<h3 style="font-size:14px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #2c3e50;color:#2c3e50;">Distribuzione per Municipio</h3>';
+            h += '<h3 style="font-size:14px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #8B0000;color:#8B0000;">Distribuzione per Municipio</h3>';
             h += '<table class="prop-table">';
             h += '<tr><th>Municipio</th><th>Proposte Elim.</th><th>Proposte Ins.</th><th>Km Elim.</th><th>Km Inserim.</th><th>Km Totali</th><th>% sul Totale</th></tr>';
             munKeys.forEach(function(munNum) {
@@ -3402,7 +3402,7 @@
 
             // ── Grafo 2026 section: complete list of arcs by municipio ──
             h += '<div class="mun-section" style="page-break-before:always;">';
-            h += '<div class="mun-header" style="background:#1a252f;"><h2>PGTU - Grafo 2026: Elenco Completo Archi</h2></div>';
+            h += '<div class="mun-header" style="background:#5a0000;"><h2>PGTU - Grafo 2026: Elenco Completo Archi</h2></div>';
             h += '<div class="sub-section">';
             h += '<p style="font-size:12px;color:#666;">Elenco completo degli archi presenti nel Grafo 2026, suddivisi per municipio con assegnazione tramite sovrapposizione spaziale.</p>';
             h += '</div></div>';
@@ -3435,7 +3435,7 @@
                 });
 
                 h += '<div class="mun-section">';
-                h += '<div class="mun-header" style="background:#34495e;"><h2>' + munLabel + ' &mdash; Grafo 2026</h2>';
+                h += '<div class="mun-header" style="background:#a01010;"><h2>' + munLabel + ' &mdash; Grafo 2026</h2>';
                 h += '<div class="mun-counts"><span style="background:rgba(255,255,255,0.2);">' + grafoItems.length + ' archi &middot; ' + totalKm.toFixed(2) + ' km</span></div>';
                 h += '</div>';
 
@@ -3532,8 +3532,8 @@
             w += '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->';
             w += '<style>';
             w += 'body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #333; margin: 2cm; }';
-            w += 'h1 { font-size: 18pt; color: #2c3e50; border-bottom: 2pt solid #2c3e50; padding-bottom: 6pt; }';
-            w += 'h2 { font-size: 14pt; color: #2c3e50; margin-top: 24pt; border-bottom: 1pt solid #bdc3c7; padding-bottom: 4pt; }';
+            w += 'h1 { font-size: 18pt; color: #8B0000; border-bottom: 2pt solid #8B0000; padding-bottom: 6pt; }';
+            w += 'h2 { font-size: 14pt; color: #8B0000; margin-top: 24pt; border-bottom: 1pt solid #bdc3c7; padding-bottom: 4pt; }';
             w += 'h3 { font-size: 12pt; margin-top: 12pt; margin-bottom: 6pt; }';
             w += 'h3.elim { color: #c0392b; }';
             w += 'h3.ins { color: #006400; }';
@@ -6929,7 +6929,7 @@
                 var footerH = Math.round(pixH * 0.04);
 
                 // Header
-                ctx.fillStyle = '#2c3e50';
+                ctx.fillStyle = '#8B0000';
                 ctx.fillRect(0, 0, pixW, headerH);
                 ctx.fillStyle = '#ffffff';
                 var titleSize = Math.round(headerH * 0.45);
