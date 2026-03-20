@@ -3386,6 +3386,20 @@
                 munKmStats[munNum] = { kmElim: kmE, kmIns: kmI, kmTot: kmE + kmI, countElim: mElim.length, countIns: mIns.length };
             });
 
+            // Compute total km for PGTU Annesso D
+            var totalKmAnnessoD = 0;
+            if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
+                (json_PGTUAnnessoD_5.features || []).forEach(function(f) {
+                    if (f.geometry) totalKmAnnessoD += calcGeoLength(f.geometry);
+                });
+            }
+
+            // Compute total km for Grafo 2026
+            var totalKmGrafo2026 = 0;
+            rd.grafoFeatures.forEach(function(f) {
+                totalKmGrafo2026 += grafoFeatureLength(f);
+            });
+
             // Advanced stats section
             h += '<div class="mun-section">';
             h += '<div class="mun-header" style="background:#5a0000;"><h2>Statistiche Avanzate</h2></div>';
@@ -3393,6 +3407,8 @@
 
             // Total km cards
             h += '<div class="summary-grid" style="margin-bottom:16px;">';
+            h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#2c3e50;">' + totalKmAnnessoD.toFixed(2) + '</div><div class="lbl">Km Totali<br>PGTU Annesso D</div></div>';
+            h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#8B0000;">' + totalKmGrafo2026.toFixed(2) + '</div><div class="lbl">Km Totali<br>Grafo 2026</div></div>';
             h += '<div class="summary-card"><div class="val" style="font-size:22px;">' + totalKm.toFixed(2) + '</div><div class="lbl">Km Totali Modificati<br><span style="font-size:9px;color:#999;">(escluse piazze/larghi e strade gi\u00e0 classificate)</span></div></div>';
             h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#e74c3c;">' + totalKmElim.toFixed(2) + '</div><div class="lbl">Km Eliminazioni</div></div>';
             h += '<div class="summary-card"><div class="val" style="font-size:22px;color:#006400;">' + totalKmIns.toFixed(2) + '</div><div class="lbl">Km Inserimenti</div></div>';
