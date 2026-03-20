@@ -2039,9 +2039,6 @@
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(proposte));
             } catch(e) {
                 console.warn('saveProposte: localStorage save failed (quota exceeded?)', e);
-                // Auto-download backup JSON so user doesn't lose data
-                try { exportProposteJSON(proposte); } catch(e2) { console.warn('Auto-export also failed', e2); }
-                alert('Attenzione: spazio browser esaurito! Le proposte sono visibili ma potrebbero non persistere al ricaricamento.\n\nUn backup JSON è stato scaricato automaticamente.\nPuoi reimportarlo al prossimo accesso tramite il pulsante "Importa".');
             }
         }
 
