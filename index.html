@@ -3906,6 +3906,10 @@
             return h;
         }
 
+        // Piazze/Larghi layer variables (declared here so they are available during renderProposte)
+        var layerPiazzeLarghi = L.layerGroup().addTo(map);
+        var piazzaLarghiRe = /^(piazza|piazzale|piazzetta|largo|larghi|rotonda|rotatoria)\b/i;
+
         // =====================================================
         // INITIAL RENDER OF SAVED PROPOSTE
         // =====================================================
@@ -5116,8 +5120,7 @@
         // =====================================================
         // PIAZZE / LARGHI LAYER (Proposte Inserimenti that are Piazza, Largo, etc.)
         // =====================================================
-        var layerPiazzeLarghi = L.layerGroup().addTo(map);
-        var piazzaLarghiRe = /^(piazza|piazzale|piazzetta|largo|larghi|rotonda|rotatoria)\b/i;
+        // NOTE: layerPiazzeLarghi and piazzaLarghiRe are declared earlier (before renderProposte)
 
         function renderPiazzeLarghi() {
             layerPiazzeLarghi.clearLayers();
