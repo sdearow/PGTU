@@ -912,13 +912,11 @@
                     <label for="toggle-grafo2026" style="font-weight:700;">PGTU - Grafo 2026</label>
                 </div>
                 <div class="legend-block" id="legend-grafo2026" style="display:none;">
-                    <div class="legend-item"><span class="legend-line" style="background:#000"></span> Autostrade (A)</div>
                     <div class="legend-item"><span class="legend-line" style="background:#007bff"></span> Scorrimento (S)</div>
                     <div class="legend-item"><span class="legend-line" style="background:#27f1ff"></span> Interquartiere (IQ)</div>
                     <div class="legend-item"><span class="legend-line" style="background:#ff9400"></span> Quartiere (Q)</div>
                     <div class="legend-item"><span class="legend-line" style="background:#e4ff00"></span> Interzonali (IZ)</div>
-                    <div class="legend-item"><span class="legend-line" style="background:#8B4513"></span> Extraurbana (EX)</div>
-                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#006400"></span> Proposta Inserimento</div>
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#006400"></span> Aggiunte</div>
                     <div style="margin-top:6px;font-size:11px;color:#666;">
                         <em>Clicca un arco per modificare/eliminare. Usa "Disegna" per aggiungere nuovi archi.</em>
                     </div>
@@ -1047,7 +1045,7 @@
                 <h3>Proposte di Modifica</h3>
                 <div class="layer-toggle">
                     <input type="checkbox" id="toggle-proposte-elim" checked>
-                    <label for="toggle-proposte-elim">Proposte Eliminazioni</label>
+                    <label for="toggle-proposte-elim">Eliminazioni</label>
                 </div>
                 <div class="legend-block" id="legend-proposte-elim">
                     <div class="legend-item"><span class="legend-line-dashed" style="border-color:#e74c3c"></span> Eliminazioni (da rete)</div>
@@ -1055,10 +1053,14 @@
                 </div>
                 <div class="layer-toggle">
                     <input type="checkbox" id="toggle-proposte-ins" checked>
-                    <label for="toggle-proposte-ins">Proposte Inserimenti</label>
+                    <label for="toggle-proposte-ins">Aggiunte</label>
                 </div>
                 <div class="legend-block" id="legend-proposte-ins">
-                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#006400"></span> Inserimenti (in rete)</div>
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#007bff"></span> Scorrimento (S)</div>
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#27f1ff"></span> Interquartiere (IQ)</div>
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#ff9400"></span> Quartiere (Q)</div>
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#e4ff00"></span> Interzonali (IZ)</div>
+                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#8B4513"></span> Extraurbana (EX)</div>
                     <div class="legend-item"><span class="legend-dot" style="background:#006400"></span> Punto Inserimento</div>
                 </div>
 
@@ -1191,8 +1193,8 @@
                     <div class="print-layer-item"><input type="checkbox" id="pl-tpl5"><label for="pl-tpl5">Rete TPL 5+</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-tpl5-no-pgtu"><label for="pl-tpl5-no-pgtu">TPL5 non in Annesso D</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-pgtu-no-tpl5"><label for="pl-pgtu-no-tpl5">Annesso D non in TPL5</label></div>
-                    <div class="print-layer-item"><input type="checkbox" id="pl-proposte-elim" checked><label for="pl-proposte-elim">Proposte Eliminazioni</label></div>
-                    <div class="print-layer-item"><input type="checkbox" id="pl-proposte-ins" checked><label for="pl-proposte-ins">Proposte Inserimenti</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-proposte-elim" checked><label for="pl-proposte-elim">Eliminazioni</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-proposte-ins" checked><label for="pl-proposte-ins">Aggiunte</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-disconnessioni"><label for="pl-disconnessioni">Disconnessioni Grafo</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-disc-class"><label for="pl-disc-class">Disconnessioni Classif.</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-disc-estrema"><label for="pl-disc-estrema">Discontinuit&agrave; Estreme</label></div>
@@ -2166,7 +2168,7 @@
                         style: function() {
                             return {
                                 color: lineColor,
-                                weight: 5,
+                                weight: 3,
                                 opacity: 0.9,
                                 dashArray: '8,6',
                                 lineCap: 'butt',
@@ -2956,7 +2958,7 @@
                             ctx.stroke();
                         } else if (p.geometry) {
                             ctx.strokeStyle = lineColor;
-                            ctx.lineWidth = 4;
+                            ctx.lineWidth = 3;
                             ctx.globalAlpha = 0.9;
                             ctx.setLineDash([8, 5]);
                             function drawLineCoords(coords) {
@@ -2982,14 +2984,28 @@
                     ctx.fillStyle = 'rgba(255,255,255,0.85)';
                     ctx.fillRect(pad - 4, legendY - 16, 200, 22);
                     ctx.font = '10px sans-serif';
-                    ctx.fillStyle = '#e74c3c';
-                    ctx.fillRect(pad, legendY - 6, 16, 3);
+                    // Dashed red line for Eliminazione
+                    ctx.strokeStyle = '#e74c3c';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([4, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad, legendY - 5);
+                    ctx.lineTo(pad + 16, legendY - 5);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
                     ctx.fillStyle = '#555';
                     ctx.fillText('Eliminazione', pad + 20, legendY);
-                    ctx.fillStyle = '#006400';
-                    ctx.fillRect(pad + 100, legendY - 6, 16, 3);
+                    // Dashed green line for Aggiunta
+                    ctx.strokeStyle = '#006400';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([4, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(pad + 100, legendY - 5);
+                    ctx.lineTo(pad + 116, legendY - 5);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
                     ctx.fillStyle = '#555';
-                    ctx.fillText('Inserimento', pad + 120, legendY);
+                    ctx.fillText('Aggiunta', pad + 120, legendY);
 
                     // OSM attribution
                     ctx.font = '9px sans-serif';
@@ -7241,6 +7257,13 @@
                     { color: '#e4ff00', label: 'Interzonali (IZ)' },
                     { color: '#8B4513', label: 'Extraurbana (EX)' }
                 ];
+                // Grafo 2026 excludes Autostrade and Extraurbana (they go to Extraurbane layers)
+                var classifEntriesGrafo = [
+                    { color: '#007bff', label: 'Scorrimento (S)' },
+                    { color: '#27f1ff', label: 'Interquartiere (IQ)' },
+                    { color: '#ff9400', label: 'Quartiere (Q)' },
+                    { color: '#e4ff00', label: 'Interzonali (IZ)' }
+                ];
 
                 // Layers with classification sub-colors
                 var classifLayers = { 'pl-pgtu': 'PGTU Annesso D', 'pl-grafo2026': 'Grafo 2026' };
@@ -7248,7 +7271,7 @@
                 var simpleLayers = {
                     'pl-pgtu-black': { color: '#000000', label: 'Annesso D (Nero)' },
                     'pl-extraurbane-altri': { color: '#555555', label: 'Extraurbane Altri Enti' },
-                    'pl-extraurbane-cdr': { color: '#8B4513', label: 'Extraurbane CdR' },
+                    'pl-extraurbane-cdr': { color: '#8B4513', label: 'Extraurbane Roma Capitale' },
                     'pl-centri-abitati': { color: '#ff9800', label: 'Centri Abitati' },
                     'pl-low-traffic': { color: '#27ae60', label: 'Flussi Bassi' },
                     'pl-high-traffic': { color: '#e74c3c', label: 'Flussi Elevati' },
@@ -7257,8 +7280,8 @@
                     'pl-tpl5': { color: '#e67e22', label: 'Rete TPL 5+' },
                     'pl-tpl5-no-pgtu': { color: '#e65100', label: 'TPL5 non in Annesso D' },
                     'pl-pgtu-no-tpl5': { color: '#1565c0', label: 'Annesso D non in TPL5' },
-                    'pl-proposte-elim': { color: '#ff0000', label: 'Proposte Eliminazioni' },
-                    'pl-proposte-ins': { color: '#00cc00', label: 'Proposte Inserimenti' },
+                    'pl-proposte-elim': { color: '#ff0000', label: 'Eliminazioni', dashed: true },
+                    'pl-proposte-ins': { color: '#00cc00', label: 'Aggiunte', dashed: true },
                     'pl-disconnessioni': { color: '#c0392b', label: 'Disconnessioni Grafo' },
                     'pl-disc-class': { color: '#1565c0', label: 'Disconnessioni Classif.' },
                     'pl-disc-estrema': { color: '#b71c1c', label: 'Discontinuità Estreme' },
@@ -7275,13 +7298,33 @@
                     'pl-disconnessioni', 'pl-disc-class', 'pl-disc-estrema', 'pl-frammenti'
                 ];
 
+                // Aggiunte classification sub-colors (dashed)
+                var aggiunteEntries = [
+                    { color: '#007bff', label: 'Scorrimento (S)' },
+                    { color: '#27f1ff', label: 'Interquartiere (IQ)' },
+                    { color: '#ff9400', label: 'Quartiere (Q)' },
+                    { color: '#e4ff00', label: 'Interzonali (IZ)' },
+                    { color: '#8B4513', label: 'Extraurbana (EX)' }
+                ];
+
                 allIds.forEach(function(id) {
                     if (!document.getElementById(id).checked) return;
                     if (classifLayers[id]) {
                         // Add header for this classification layer
                         items.push({ header: true, label: classifLayers[id] });
-                        classifEntries.forEach(function(e) {
+                        var entries = (id === 'pl-grafo2026') ? classifEntriesGrafo : classifEntries;
+                        entries.forEach(function(e) {
                             items.push({ color: e.color, label: '  ' + e.label, indent: true });
+                        });
+                        // For Grafo 2026, add dashed Aggiunte entry
+                        if (id === 'pl-grafo2026') {
+                            items.push({ color: '#006400', label: '  Aggiunte', indent: true, dashed: true });
+                        }
+                    } else if (id === 'pl-proposte-ins') {
+                        // Aggiunte: show dashed lines in classification colors
+                        items.push({ header: true, label: 'Aggiunte' });
+                        aggiunteEntries.forEach(function(e) {
+                            items.push({ color: e.color, label: '  ' + e.label, indent: true, dashed: true });
                         });
                     } else if (simpleLayers[id]) {
                         items.push(simpleLayers[id]);
@@ -7327,9 +7370,21 @@
                     } else {
                         var labelX = legX + legPad;
                         if (item.indent) labelX += Math.round(legFontSize * 0.5);
-                        // Color swatch
-                        ctx.fillStyle = item.color;
-                        ctx.fillRect(labelX, curY + Math.round(legFontSize * 0.25), Math.round(legFontSize * 1.5), Math.round(legFontSize * 0.5));
+                        // Color swatch (solid or dashed)
+                        if (item.dashed) {
+                            var swY = curY + Math.round(legFontSize * 0.45);
+                            ctx.strokeStyle = item.color;
+                            ctx.lineWidth = Math.round(legFontSize * 0.4);
+                            ctx.setLineDash([Math.round(legFontSize * 0.5), Math.round(legFontSize * 0.35)]);
+                            ctx.beginPath();
+                            ctx.moveTo(labelX, swY);
+                            ctx.lineTo(labelX + Math.round(legFontSize * 1.5), swY);
+                            ctx.stroke();
+                            ctx.setLineDash([]);
+                        } else {
+                            ctx.fillStyle = item.color;
+                            ctx.fillRect(labelX, curY + Math.round(legFontSize * 0.25), Math.round(legFontSize * 1.5), Math.round(legFontSize * 0.5));
+                        }
                         // Label
                         ctx.fillStyle = '#333';
                         ctx.font = legFontSize + 'px sans-serif';
