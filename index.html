@@ -1736,7 +1736,7 @@
 
         function saveExtraurbane(features) {
             extraurbaneFeatures = features;
-            try { localStorage.setItem(EXTRAURBANE_KEY, JSON.stringify(features)); } catch(e) {}
+            try { localStorage.setItem(EXTRAURBANE_KEY, JSON.stringify(features)); } catch(e) { console.warn('saveExtraurbane: localStorage quota exceeded', e); }
         }
 
         function buildInitialExtraurbane() {
@@ -1984,22 +1984,29 @@
         // MANUAL PROPOSTE SYSTEM (localStorage-based)
         // =====================================================
         var STORAGE_KEY = 'pgtu_proposte_manual';
+        var proposteCache = null; // in-memory cache (authoritative when set)
 
         // Layer groups for manual proposte
         var manualElimGroup = L.layerGroup().addTo(map);
         var manualInsGroup = L.layerGroup().addTo(map);
 
         function loadProposte() {
+            if (proposteCache) return proposteCache;
             try {
                 var data = localStorage.getItem(STORAGE_KEY);
-                return data ? JSON.parse(data) : [];
+                proposteCache = data ? JSON.parse(data) : [];
+                return proposteCache;
             } catch(e) { return []; }
         }
 
         function saveProposte(proposte) {
+            proposteCache = proposte; // always update in-memory cache
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(proposte));
-            } catch(e) {}
+            } catch(e) {
+                console.warn('saveProposte: localStorage save failed (quota exceeded?)', e);
+                alert('Attenzione: impossibile salvare le proposte nel browser (spazio esaurito). Le proposte sono visibili ma potrebbero non persistere al ricaricamento. Esporta un backup JSON.');
+            }
         }
 
         function generateId() {
