@@ -1999,13 +1999,25 @@
             } catch(e) { return []; }
         }
 
+        function exportProposteJSON(proposte) {
+            var blob = new Blob([JSON.stringify(proposte, null, 2)], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'pgtu_proposte_' + new Date().toISOString().slice(0,10) + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
         function saveProposte(proposte) {
             proposteCache = proposte; // always update in-memory cache
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(proposte));
             } catch(e) {
                 console.warn('saveProposte: localStorage save failed (quota exceeded?)', e);
-                alert('Attenzione: impossibile salvare le proposte nel browser (spazio esaurito). Le proposte sono visibili ma potrebbero non persistere al ricaricamento. Esporta un backup JSON.');
+                // Auto-download backup JSON so user doesn't lose data
+                try { exportProposteJSON(proposte); } catch(e2) { console.warn('Auto-export also failed', e2); }
+                alert('Attenzione: spazio browser esaurito! Le proposte sono visibili ma potrebbero non persistere al ricaricamento.\n\nUn backup JSON è stato scaricato automaticamente.\nPuoi reimportarlo al prossimo accesso tramite il pulsante "Importa".');
             }
         }
 
@@ -2614,13 +2626,7 @@
         document.getElementById('btn-export-proposte').addEventListener('click', function() {
             var proposte = loadProposte();
             if (proposte.length === 0) { alert('Nessuna proposta da esportare.'); return; }
-            var blob = new Blob([JSON.stringify(proposte, null, 2)], { type: 'application/json' });
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url;
-            a.download = 'pgtu_proposte_' + new Date().toISOString().slice(0,10) + '.json';
-            a.click();
-            URL.revokeObjectURL(url);
+            exportProposteJSON(proposte);
         });
 
         // GeoJSON export for QGIS
