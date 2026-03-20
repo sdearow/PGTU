@@ -1661,6 +1661,30 @@
                 });
                 layerExtraurbaneAltri.addLayer(spLayer);
             }
+            // Add Autostrade (A) from Annesso D to this layer
+            if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
+                var annesso = json_PGTUAnnessoD_5.features || [];
+                annesso.forEach(function(f) {
+                    var classifica = (f.properties.Classifica || '').toUpperCase();
+                    if (classifica !== 'A') return;
+                    var geoLayer = L.geoJSON(f.geometry, {
+                        style: function() { return { color: '#000000', weight: 3.5, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }; }
+                    });
+                    var name = f.properties.Toponomast || f.properties.Nome || 'Arco senza nome';
+                    var html = '<div class="popup-title">' + name + '</div>';
+                    html += '<span class="popup-layer-badge" style="background:#000000;">Autostrada (da Annesso D)</span>';
+                    html += '<table class="popup-table">';
+                    html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#000;color:white;">Autostrada</th></tr>';
+                    html += popupRow('Classificazione', 'Autostrade (A)');
+                    if (f.properties.Limiti) html += popupRow('Limiti', f.properties.Limiti);
+                    if (f.properties.Municipio && f.properties.Municipio !== '-') html += popupRow('Municipio', f.properties.Municipio);
+                    if (f.properties.Grande_Via) html += popupRow('Grande Viabilit\u00e0', f.properties.Grande_Via);
+                    html += popupRow('Fonte', 'Annesso D');
+                    html += '</table>';
+                    geoLayer.bindPopup(html, { maxWidth: 380 });
+                    layerExtraurbaneAltri.addLayer(geoLayer);
+                });
+            }
             // Add Extraurbane features where ente != Comune di Roma
             var features = loadExtraurbane();
             if (!features) { features = buildInitialExtraurbane(); saveExtraurbane(features); }
@@ -3715,67 +3739,272 @@
               var grafoByMunicipio = rd.grafoByMunicipio;
               var munKeys = rd.munKeys;
 
-              function getItemRow(item, idx) {
-                  var name, cf, km, mun, notes;
-                  if (item.kind === 'road') {
-                      name = item.data.name || 'N/D';
-                      cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
-                      km = item.data.lunghezza > 0 ? Math.round(item.data.lunghezza * 100) / 100 : '';
-                      mun = item.data.municipio || '';
-                      notes = item.data.notes.length > 0 ? item.data.notes.join('; ') : '';
-                  } else {
-                      name = item.data.name || 'N/D';
-                      cf = item.data.classificazione ? (classificaNames[item.data.classificazione] || item.data.classificazione) : '';
-                      var len = item.data.lunghezza || calcGeoLength(item.data.geometry);
-                      km = len > 0 ? Math.round(len * 100) / 100 : '';
-                      mun = item.data.municipio || '';
-                      notes = (item.data.notes || '').trim();
-                  }
-                  return [idx + 1, name, cf, km, mun ? getMunLabel(mun) : '', notes];
+              // Regexes for filtering
+              var piazzaRe = /^(piazza|piazzale|piazzetta|largo|larghi|rotonda|rotatoria)\b/i;
+
+              // Helper: get item name
+              function getItemName(item) {
+                  return (item.kind === 'road' ? item.data.name : item.data.name) || 'N/D';
+              }
+              // Helper: get item classification code
+              function getItemCfCode(item) {
+                  return (item.kind === 'road' ? item.data.classificazione : item.data.classificazione) || '';
+              }
+              // Helper: get item classification label
+              function getItemCfLabel(item) {
+                  var cf = getItemCfCode(item);
+                  return cf ? (classificaNames[cf] || cf) + ' (' + cf + ')' : '';
+              }
+              // Helper: get item km (number)
+              function getItemKmNum(item) {
+                  if (item.kind === 'road') return item.data.lunghezza || 0;
+                  return item.data.lunghezza || calcGeoLength(item.data.geometry);
+              }
+              // Helper: get item municipio label
+              function getItemMun(item) {
+                  var mun = (item.kind === 'road' ? item.data.municipio : item.data.municipio) || '';
+                  return mun ? getMunLabel(mun) : '';
+              }
+              // Helper: get item notes
+              function getItemNotes(item) {
+                  if (item.kind === 'road') return item.data.notes.length > 0 ? item.data.notes.join('; ') : '';
+                  return (item.data.notes || '').trim();
+              }
+
+              // Classify each merged item
+              function isPiazza(item) { return piazzaRe.test(getItemName(item).trim()); }
+              function isExtraurbana(item) { return getItemCfCode(item) === 'EX'; }
+              function isRegularProposta(item) { return !isPiazza(item) && !isExtraurbana(item); }
+
+              // Build row for proposte (7 columns: #, Nome, Classificazione, Km, Municipio, Fonte, Note)
+              function getItemRow7(item, idx) {
+                  var km = getItemKmNum(item);
+                  var source = item.kind === 'road' ? (item.data.source || '') : (item.data.source || '');
+                  return [idx + 1, getItemName(item), getItemCfLabel(item), km > 0 ? Math.round(km * 100) / 100 : '', getItemMun(item), source, getItemNotes(item)];
               }
 
               // Build Excel workbook
               var wb = XLSX.utils.book_new();
-              var colWidths = [
+              var colWidths7 = [
                   { wch: 5 },   // #
                   { wch: 35 },  // Nome
-                  { wch: 18 },  // Classificazione
+                  { wch: 22 },  // Classificazione
+                  { wch: 8 },   // Km
+                  { wch: 20 },  // Municipio
+                  { wch: 20 },  // Fonte
+                  { wch: 45 }   // Note
+              ];
+              var colWidths6 = [
+                  { wch: 5 },   // #
+                  { wch: 35 },  // Nome
+                  { wch: 22 },  // Classificazione
                   { wch: 8 },   // Km
                   { wch: 20 },  // Municipio
                   { wch: 50 }   // Note
               ];
 
-              // Proposte sheets per municipio
+              // ── STATISTICS SHEET (first sheet) ──
+              // Compute stats: only regular proposte (exclude piazze and extraurbane)
+              var allElim = mergeProposte(proposte.filter(function(p) { return p.type === 'eliminazione'; }));
+              var allIns = mergeProposte(proposte.filter(function(p) { return p.type === 'inserimento'; }));
+              var regElim = allElim.filter(isRegularProposta);
+              var regIns = allIns.filter(isRegularProposta);
+              var piazzeIns = allIns.filter(isPiazza);
+              var exCdrIns = allIns.filter(isExtraurbana);
+              var piazzeElim = allElim.filter(isPiazza);
+              var exCdrElim = allElim.filter(isExtraurbana);
+
+              var kmElim = 0, kmIns = 0;
+              regElim.forEach(function(item) { kmElim += getItemKmNum(item); });
+              regIns.forEach(function(item) { kmIns += getItemKmNum(item); });
+              var kmPiazzeIns = 0, kmPiazzeElim = 0, kmExIns = 0, kmExElim = 0;
+              piazzeIns.forEach(function(item) { kmPiazzeIns += getItemKmNum(item); });
+              piazzeElim.forEach(function(item) { kmPiazzeElim += getItemKmNum(item); });
+              exCdrIns.forEach(function(item) { kmExIns += getItemKmNum(item); });
+              exCdrElim.forEach(function(item) { kmExElim += getItemKmNum(item); });
+
+              // Per-classification breakdown (regular proposte only)
+              var cfStatsElim = {}, cfStatsIns = {};
+              regElim.forEach(function(item) {
+                  var cf = getItemCfCode(item) || 'N/D';
+                  if (!cfStatsElim[cf]) cfStatsElim[cf] = { count: 0, km: 0 };
+                  cfStatsElim[cf].count++;
+                  cfStatsElim[cf].km += getItemKmNum(item);
+              });
+              regIns.forEach(function(item) {
+                  var cf = getItemCfCode(item) || 'N/D';
+                  if (!cfStatsIns[cf]) cfStatsIns[cf] = { count: 0, km: 0 };
+                  cfStatsIns[cf].count++;
+                  cfStatsIns[cf].km += getItemKmNum(item);
+              });
+
+              // Per-municipio breakdown (regular proposte only)
+              var munStatsElim = {}, munStatsIns = {};
+              munKeys.forEach(function(munNum) {
+                  var items = byMunicipio[munNum] || [];
+                  var mElim = mergeProposte(items.filter(function(p) { return p.type === 'eliminazione'; })).filter(isRegularProposta);
+                  var mIns = mergeProposte(items.filter(function(p) { return p.type === 'inserimento'; })).filter(isRegularProposta);
+                  var keE = 0, keI = 0;
+                  mElim.forEach(function(item) { keE += getItemKmNum(item); });
+                  mIns.forEach(function(item) { keI += getItemKmNum(item); });
+                  munStatsElim[munNum] = { count: mElim.length, km: keE };
+                  munStatsIns[munNum] = { count: mIns.length, km: keI };
+              });
+
+              var statsRows = [];
+              statsRows.push(['STATISTICHE REPORT PGTU', '', '', '', '']);
+              statsRows.push(['Generato il ' + new Date().toLocaleDateString('it-IT'), '', '', '', '']);
+              statsRows.push([]);
+              statsRows.push(['RIEPILOGO GENERALE (escluse Piazze/Larghi e Strade Extraurbane)', '', '', '', '']);
+              statsRows.push(['', 'Numero Proposte', 'Km Totali', '', '']);
+              statsRows.push(['Eliminazioni', regElim.length, Math.round(kmElim * 100) / 100, '', '']);
+              statsRows.push(['Inserimenti', regIns.length, Math.round(kmIns * 100) / 100, '', '']);
+              statsRows.push(['Totale', regElim.length + regIns.length, Math.round((kmElim + kmIns) * 100) / 100, '', '']);
+              statsRows.push([]);
+              statsRows.push(['Differenza netta km (Inserimenti - Eliminazioni)', '', Math.round((kmIns - kmElim) * 100) / 100, '', '']);
+              statsRows.push([]);
+              statsRows.push(['CATEGORIE SEPARATE (non conteggiate sopra)', '', '', '', '']);
+              statsRows.push(['Categoria', 'Eliminazioni', 'Inserimenti', 'Km Elim.', 'Km Ins.']);
+              statsRows.push(['Piazze, Larghi ecc.', piazzeElim.length, piazzeIns.length, Math.round(kmPiazzeElim * 100) / 100, Math.round(kmPiazzeIns * 100) / 100]);
+              statsRows.push(['Strade Extraurbane (EX)', exCdrElim.length, exCdrIns.length, Math.round(kmExElim * 100) / 100, Math.round(kmExIns * 100) / 100]);
+              statsRows.push([]);
+              statsRows.push(['DISTRIBUZIONE PER CLASSIFICAZIONE (solo proposte regolari)', '', '', '', '']);
+              statsRows.push(['Classificazione', 'Elim. (n)', 'Elim. (km)', 'Ins. (n)', 'Ins. (km)']);
+              var allCfKeys = {};
+              Object.keys(cfStatsElim).forEach(function(k) { allCfKeys[k] = true; });
+              Object.keys(cfStatsIns).forEach(function(k) { allCfKeys[k] = true; });
+              Object.keys(allCfKeys).sort().forEach(function(cf) {
+                  var eS = cfStatsElim[cf] || { count: 0, km: 0 };
+                  var iS = cfStatsIns[cf] || { count: 0, km: 0 };
+                  var cfLabel = classificaNames[cf] ? classificaNames[cf] + ' (' + cf + ')' : cf;
+                  statsRows.push([cfLabel, eS.count, Math.round(eS.km * 100) / 100, iS.count, Math.round(iS.km * 100) / 100]);
+              });
+              statsRows.push([]);
+              statsRows.push(['DISTRIBUZIONE PER MUNICIPIO (solo proposte regolari)', '', '', '', '']);
+              statsRows.push(['Municipio', 'Elim. (n)', 'Elim. (km)', 'Ins. (n)', 'Ins. (km)']);
+              munKeys.forEach(function(munNum) {
+                  var eS = munStatsElim[munNum] || { count: 0, km: 0 };
+                  var iS = munStatsIns[munNum] || { count: 0, km: 0 };
+                  if (eS.count === 0 && iS.count === 0) return;
+                  statsRows.push([getMunLabel(munNum), eS.count, Math.round(eS.km * 100) / 100, iS.count, Math.round(iS.km * 100) / 100]);
+              });
+              var wsStats = XLSX.utils.aoa_to_sheet(statsRows);
+              wsStats['!cols'] = [{ wch: 45 }, { wch: 18 }, { wch: 15 }, { wch: 18 }, { wch: 15 }];
+              XLSX.utils.book_append_sheet(wb, wsStats, 'Statistiche');
+
+              // ── PROPOSTE SHEETS PER MUNICIPIO (regular proposte only, no piazze, no extraurbane) ──
               munKeys.forEach(function(munNum) {
                   var items = byMunicipio[munNum] || [];
                   var munLabel = getMunLabel(munNum);
-                  var munElim = items.filter(function(p) { return p.type === 'eliminazione'; });
-                  var munIns = items.filter(function(p) { return p.type === 'inserimento'; });
-                  var mergedElim = mergeProposte(munElim);
-                  var mergedIns = mergeProposte(munIns);
+                  var munElim = mergeProposte(items.filter(function(p) { return p.type === 'eliminazione'; })).filter(isRegularProposta);
+                  var munIns = mergeProposte(items.filter(function(p) { return p.type === 'inserimento'; })).filter(isRegularProposta);
 
                   var rows = [];
-                  if (mergedElim.length > 0) {
-                      rows.push(['PROPOSTE DI ELIMINAZIONE (' + mergedElim.length + ')', '', '', '', '', '']);
-                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Note']);
-                      mergedElim.forEach(function(item, idx) { rows.push(getItemRow(item, idx)); });
+                  if (munElim.length > 0) {
+                      rows.push(['PROPOSTE DI ELIMINAZIONE (' + munElim.length + ')', '', '', '', '', '', '']);
+                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Fonte', 'Note']);
+                      munElim.forEach(function(item, idx) { rows.push(getItemRow7(item, idx)); });
                       rows.push([]); // empty separator row
                   }
-                  if (mergedIns.length > 0) {
-                      rows.push(['PROPOSTE DI INSERIMENTO (' + mergedIns.length + ')', '', '', '', '', '']);
-                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Note']);
-                      mergedIns.forEach(function(item, idx) { rows.push(getItemRow(item, idx)); });
+                  if (munIns.length > 0) {
+                      rows.push(['PROPOSTE DI INSERIMENTO (' + munIns.length + ')', '', '', '', '', '', '']);
+                      rows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Fonte', 'Note']);
+                      munIns.forEach(function(item, idx) { rows.push(getItemRow7(item, idx)); });
                   }
 
                   if (rows.length > 0) {
                       var ws = XLSX.utils.aoa_to_sheet(rows);
-                      ws['!cols'] = colWidths;
+                      ws['!cols'] = colWidths7;
                       var sheetName = ('P ' + munLabel).substring(0, 31);
                       XLSX.utils.book_append_sheet(wb, ws, sheetName);
                   }
               });
 
-              // Grafo 2026 sheets per municipio
+              // ── PIAZZE, LARGHI ECC. SHEET (separate list) ──
+              var allPiazzeElim = [];
+              var allPiazzeIns = [];
+              proposte.forEach(function(p) {
+                  if (!piazzaRe.test((p.name || '').trim())) return;
+                  if (p.type === 'eliminazione') allPiazzeElim.push(p);
+                  else if (p.type === 'inserimento') allPiazzeIns.push(p);
+              });
+              var mergedPiazzeElim = mergeProposte(allPiazzeElim);
+              var mergedPiazzeIns = mergeProposte(allPiazzeIns);
+              if (mergedPiazzeElim.length > 0 || mergedPiazzeIns.length > 0) {
+                  var pzRows = [];
+                  if (mergedPiazzeElim.length > 0) {
+                      pzRows.push(['PIAZZE / LARGHI - ELIMINAZIONI (' + mergedPiazzeElim.length + ')', '', '', '', '', '', '']);
+                      pzRows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Fonte', 'Note']);
+                      mergedPiazzeElim.forEach(function(item, idx) { pzRows.push(getItemRow7(item, idx)); });
+                      pzRows.push([]);
+                  }
+                  if (mergedPiazzeIns.length > 0) {
+                      pzRows.push(['PIAZZE / LARGHI - INSERIMENTI (' + mergedPiazzeIns.length + ')', '', '', '', '', '', '']);
+                      pzRows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Fonte', 'Note']);
+                      mergedPiazzeIns.forEach(function(item, idx) { pzRows.push(getItemRow7(item, idx)); });
+                  }
+                  var wsPz = XLSX.utils.aoa_to_sheet(pzRows);
+                  wsPz['!cols'] = colWidths7;
+                  XLSX.utils.book_append_sheet(wb, wsPz, 'Piazze Larghi ecc.');
+              }
+
+              // ── STRADE EXTRAURBANE COMUNE DI ROMA SHEET (separate list) ──
+              var exCdrFeatures = (loadExtraurbane() || buildInitialExtraurbane()).filter(function(f) {
+                  return !f.ente || f.ente === 'Comune di Roma';
+              });
+              if (exCdrFeatures.length > 0) {
+                  var exCdrRows = [];
+                  exCdrRows.push(['STRADE EXTRAURBANE COMUNE DI ROMA (' + exCdrFeatures.length + ' archi)', '', '', '', '', '']);
+                  exCdrRows.push(['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Note']);
+                  exCdrFeatures.sort(function(a, b) {
+                      var na = (a.name || '').toLowerCase();
+                      var nb = (b.name || '').toLowerCase();
+                      return na < nb ? -1 : (na > nb ? 1 : 0);
+                  });
+                  exCdrFeatures.forEach(function(f, idx) {
+                      var cfCode = (f.classifica || '').toUpperCase();
+                      var cfLabel = classificaNames[cfCode] ? classificaNames[cfCode] + ' (' + cfCode + ')' : (cfCode || '');
+                      var km = f.geometry ? calcGeoLength(f.geometry) : 0;
+                      exCdrRows.push([idx + 1, f.name || '(senza nome)', cfLabel, km > 0 ? Math.round(km * 100) / 100 : '', f.municipio || '', f.note || '']);
+                  });
+                  var wsExCdr = XLSX.utils.aoa_to_sheet(exCdrRows);
+                  wsExCdr['!cols'] = colWidths6;
+                  XLSX.utils.book_append_sheet(wb, wsExCdr, 'Extraurbane CdR');
+              }
+
+              // ── STRADE EXTRAURBANE ALTRI ENTI SHEET (separate list, includes Autostrade from Annesso D) ──
+              var exAltriRows = [];
+              var exAltriCount = 0;
+              // Add Autostrade from Annesso D
+              if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
+                  (json_PGTUAnnessoD_5.features || []).forEach(function(f) {
+                      if ((f.properties.Classifica || '').toUpperCase() !== 'A') return;
+                      var km = f.geometry ? calcGeoLength(f.geometry) : 0;
+                      exAltriCount++;
+                      exAltriRows.push([exAltriCount, f.properties.Toponomast || f.properties.Nome || '(senza nome)', 'Autostrade (A)', km > 0 ? Math.round(km * 100) / 100 : '', f.properties.Municipio || '', 'Annesso D', f.properties.Note_2025 || '']);
+                  });
+              }
+              // Add non-CdR extraurbane
+              var allExFeatures = loadExtraurbane() || buildInitialExtraurbane();
+              allExFeatures.forEach(function(f) {
+                  if (!f.ente || f.ente === 'Comune di Roma') return;
+                  var cfCode = (f.classifica || '').toUpperCase();
+                  var cfLabel = classificaNames[cfCode] ? classificaNames[cfCode] + ' (' + cfCode + ')' : (cfCode || '');
+                  var km = f.geometry ? calcGeoLength(f.geometry) : 0;
+                  exAltriCount++;
+                  exAltriRows.push([exAltriCount, f.name || '(senza nome)', cfLabel, km > 0 ? Math.round(km * 100) / 100 : '', f.municipio || '', f.source || '', f.note || '']);
+              });
+              if (exAltriRows.length > 0) {
+                  var headerRows = [
+                      ['STRADE EXTRAURBANE ALTRI ENTI (' + exAltriCount + ' archi)', '', '', '', '', '', ''],
+                      ['#', 'Nome', 'Classificazione', 'Km', 'Municipio', 'Fonte', 'Note']
+                  ];
+                  var wsExAltri = XLSX.utils.aoa_to_sheet(headerRows.concat(exAltriRows));
+                  wsExAltri['!cols'] = colWidths7;
+                  XLSX.utils.book_append_sheet(wb, wsExAltri, 'Extraurbane Altri Enti');
+              }
+
+              // ── GRAFO 2026 SHEETS PER MUNICIPIO ──
               munKeys.forEach(function(munNum) {
                   var grafoItems = grafoByMunicipio[munNum] || [];
                   if (grafoItems.length === 0) return;
@@ -3808,7 +4037,7 @@
                   });
 
                   var ws = XLSX.utils.aoa_to_sheet(rows);
-                  ws['!cols'] = colWidths;
+                  ws['!cols'] = colWidths6;
                   var sheetName = ('G ' + munLabel).substring(0, 31);
                   XLSX.utils.book_append_sheet(wb, ws, sheetName);
               });
@@ -5250,14 +5479,16 @@
 
         function buildInitialGrafo() {
             var features = [];
-            // 1) Add all Annesso D features
+            // 1) Add Annesso D features (excluding Autostrade 'A' which go to Extraurbane Altri Enti)
             if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
                 var annesso = json_PGTUAnnessoD_5.features || [];
                 annesso.forEach(function(f, idx) {
+                    var classifica = f.properties.Classifica || '';
+                    if (classifica.toUpperCase() === 'A') return; // Autostrade go to Strade Extraurbane Altri Enti
                     features.push({
                         id: 'ad_' + idx,
                         name: f.properties.Toponomast || f.properties.Nome || '',
-                        classifica: f.properties.Classifica || '',
+                        classifica: classifica,
                         limiti: f.properties.Limiti || '',
                         municipio: f.properties.Municipio || '',
                         cod_prog: f.properties.Cod_prog || '',
@@ -6282,6 +6513,13 @@
                     return makeGeoJSON('PGTU_Grafo_2026', grafoFeatures);
                 case 'extraurbane-altri':
                     var altriFeats = [];
+                    // Add Autostrade (A) from Annesso D
+                    if (typeof json_PGTUAnnessoD_5 !== 'undefined') {
+                        (json_PGTUAnnessoD_5.features || []).forEach(function(f) {
+                            if ((f.properties.Classifica || '').toUpperCase() !== 'A') return;
+                            altriFeats.push({ type: 'Feature', properties: Object.assign({}, f.properties, { fonte: 'Annesso D - Autostrada' }), geometry: f.geometry });
+                        });
+                    }
                     // Add Strade Provinciali
                     var filteredSP = filterStradeInsideMunicipi(typeof json_StradeProvinciali !== 'undefined' ? json_StradeProvinciali : {});
                     (filteredSP.features || []).forEach(function(f) {
