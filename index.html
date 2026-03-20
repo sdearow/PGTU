@@ -7376,45 +7376,83 @@
                 return { headerH: headerH, footerH: footerH };
             }
 
+            // Maximum canvas area (pixels) browsers can reliably handle for toDataURL/toBlob
+            var MAX_CANVAS_AREA = 16384 * 16384; // ~268 megapixels
+
             // Export canvas to the selected output format (png, jpeg, pdf)
             function exportCanvas(finalCanvas, filename, paperFormat, callback) {
                 var outputFmt = (document.getElementById('print-output-format') || {}).value || 'png';
 
+                // Guard against oversized canvases that crash toDataURL/toBlob
+                var canvasArea = finalCanvas.width * finalCanvas.height;
+                if (canvasArea > MAX_CANVAS_AREA) {
+                    alert('La dimensione dell\'immagine è troppo grande per il browser (' +
+                        finalCanvas.width + '×' + finalCanvas.height + ' px). ' +
+                        'Riduci il DPI o il formato carta e riprova.');
+                    callback(false);
+                    return;
+                }
+
                 if (outputFmt === 'jpeg') {
-                    finalCanvas.toBlob(function(blob) {
-                        var url = URL.createObjectURL(blob);
-                        var a = document.createElement('a');
-                        a.href = url;
-                        a.download = filename.replace(/\.png$/, '') + '.jpg';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        callback(true);
-                    }, 'image/jpeg', 0.95);
+                    try {
+                        finalCanvas.toBlob(function(blob) {
+                            if (!blob) { alert('Errore nella generazione JPEG. Riduci il DPI o il formato carta.'); callback(false); return; }
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename.replace(/\.png$/, '') + '.jpg';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            callback(true);
+                        }, 'image/jpeg', 0.95);
+                    } catch (err) {
+                        console.error('Errore export JPEG:', err);
+                        alert('Errore nella generazione JPEG: ' + err.message);
+                        callback(false);
+                    }
                 } else if (outputFmt === 'pdf') {
-                    var paper = paperSizes[paperFormat] || paperSizes['a4'];
-                    var jsPDF = window.jspdf && window.jspdf.jsPDF;
-                    if (!jsPDF) { alert('jsPDF non disponibile. Riprova.'); callback(false); return; }
-                    // paper.w is the long side, paper.h is the short side (all landscape)
-                    var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [paper.h, paper.w] });
-                    var imgData = finalCanvas.toDataURL('image/jpeg', 0.92);
-                    pdf.addImage(imgData, 'JPEG', 0, 0, paper.w, paper.h);
-                    pdf.save(filename.replace(/\.png$/, '') + '.pdf');
-                    callback(true);
+                    try {
+                        var paper = paperSizes[paperFormat] || paperSizes['a4'];
+                        var jsPDF = window.jspdf && window.jspdf.jsPDF;
+                        if (!jsPDF) { alert('jsPDF non disponibile. Riprova.'); callback(false); return; }
+                        // paper.w is the long side, paper.h is the short side (all landscape)
+                        var pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [paper.h, paper.w] });
+                        var imgData = finalCanvas.toDataURL('image/jpeg', 0.92);
+                        if (!imgData || imgData === 'data:,') {
+                            alert('Errore: impossibile convertire la mappa in immagine. Riduci il DPI o il formato carta.');
+                            callback(false);
+                            return;
+                        }
+                        pdf.addImage(imgData, 'JPEG', 0, 0, paper.w, paper.h);
+                        pdf.save(filename.replace(/\.png$/, '') + '.pdf');
+                        callback(true);
+                    } catch (err) {
+                        console.error('Errore export PDF:', err);
+                        alert('Errore nella generazione PDF: ' + err.message + '\nRiduci il DPI o il formato carta e riprova.');
+                        callback(false);
+                    }
                 } else {
                     // PNG (default)
-                    finalCanvas.toBlob(function(blob) {
-                        var url = URL.createObjectURL(blob);
-                        var a = document.createElement('a');
-                        a.href = url;
-                        a.download = filename.replace(/\.png$/, '') + '.png';
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                        callback(true);
-                    }, 'image/png');
+                    try {
+                        finalCanvas.toBlob(function(blob) {
+                            if (!blob) { alert('Errore nella generazione PNG. Riduci il DPI o il formato carta.'); callback(false); return; }
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename.replace(/\.png$/, '') + '.png';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            callback(true);
+                        }, 'image/png');
+                    } catch (err) {
+                        console.error('Errore export PNG:', err);
+                        alert('Errore nella generazione PNG: ' + err.message);
+                        callback(false);
+                    }
                 }
             }
 
