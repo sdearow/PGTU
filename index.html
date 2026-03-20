@@ -4320,6 +4320,8 @@
             }
             var poly = getMunicipioPolygon(munNum);
             if (!poly) return;
+            // Buffer the polygon slightly (~50m) so roads exactly on the border are included
+            try { poly = turf.buffer(poly, 0.05, { units: 'kilometers' }) || poly; } catch(e) {}
 
             // Helper: clone sublayers from a layer group that intersect the municipio
             function cloneIntersecting(sourceLayer) {
@@ -4452,8 +4454,11 @@
             if (!munLayer) return;
 
             // Build inverted polygon: world exterior with municipio as hole
+            // Buffer slightly (~50m) to match the highlight clip buffer
             var worldRing = [[-90, -180], [-90, 180], [90, 180], [90, -180], [-90, -180]];
-            var geom = munLayer.feature.geometry;
+            var buffered = null;
+            try { buffered = turf.buffer(munLayer.toGeoJSON(), 0.05, { units: 'kilometers' }); } catch(e) {}
+            var geom = buffered ? buffered.geometry : munLayer.feature.geometry;
             var holes = [];
             if (geom.type === 'Polygon') {
                 holes = geom.coordinates.map(function(ring) {
@@ -7192,9 +7197,15 @@
                 mapCtx.fillRect(0, 0, pixW, mapH);
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
-                    // Build clip path for selected municipio
+                    // Build clip path for selected municipio (buffered ~50m for border roads)
                     var munLayer = getMunicipioLayer(municipioNum);
-                    var munGeom = munLayer ? munLayer.feature.geometry : null;
+                    var munGeom = null;
+                    if (munLayer) {
+                        try {
+                            var bufferedExport = turf.buffer(munLayer.toGeoJSON(), 0.05, { units: 'kilometers' });
+                            munGeom = bufferedExport ? bufferedExport.geometry : munLayer.feature.geometry;
+                        } catch(e) { munGeom = munLayer.feature.geometry; }
+                    }
 
                     function buildMunClipPath(ctx2) {
                         if (!munGeom) return;
