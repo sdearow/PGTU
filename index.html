@@ -7223,7 +7223,29 @@
             }
 
             // Draw all visible checked layers on the canvas
-            function drawLayers(ctx, zoom, originX, originY, checkedLayers) {
+            // Check if a geometry's bounding box intersects a given bbox [minLng, minLat, maxLng, maxLat]
+            function geomIntersectsBBox(geom, bbox) {
+                if (!geom || !bbox) return true; // no filter = draw all
+                var coords = geom.coordinates;
+                if (!coords) return true;
+                // Flatten to coordinate arrays depending on type
+                var flat = [];
+                switch (geom.type) {
+                    case 'Point': flat = [coords]; break;
+                    case 'MultiPoint': case 'LineString': flat = coords; break;
+                    case 'MultiLineString': case 'Polygon': coords.forEach(function(r) { flat = flat.concat(r); }); break;
+                    case 'MultiPolygon': coords.forEach(function(p) { p.forEach(function(r) { flat = flat.concat(r); }); }); break;
+                    default: return true;
+                }
+                // Check if any coordinate falls within the expanded bbox
+                for (var i = 0; i < flat.length; i++) {
+                    var lng = flat[i][0], lat = flat[i][1];
+                    if (lng >= bbox[0] && lng <= bbox[2] && lat >= bbox[1] && lat <= bbox[3]) return true;
+                }
+                return false;
+            }
+
+            function drawLayers(ctx, zoom, originX, originY, filterBBox) {
                 // Define drawing order
                 var drawOrder = [
                     'pl-centri-abitati', 'pl-low-traffic', 'pl-high-traffic',
@@ -7242,6 +7264,7 @@
                     if (!lyr) return;
                     var items = collectLeafletLayers(lyr);
                     items.forEach(function(item) {
+                        if (!geomIntersectsBBox(item.geom, filterBBox)) return;
                         drawGeometry(ctx, item.geom, zoom, originX, originY, item.style);
                     });
                 });
@@ -7651,6 +7674,7 @@
                 mapCtx.fillRect(0, 0, pixW, mapH);
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
+                  try {
                     // Build clip path for selected municipio (buffered ~50m for border roads)
                     var munLayer = getMunicipioLayer(municipioNum);
                     var munGeom = null;
@@ -7659,6 +7683,18 @@
                             var bufferedExport = turf.buffer(munLayer.toGeoJSON(), 0.05, { units: 'kilometers' });
                             munGeom = bufferedExport ? bufferedExport.geometry : munLayer.feature.geometry;
                         } catch(e) { munGeom = munLayer.feature.geometry; }
+                    }
+
+                    // Compute expanded bounding box for feature filtering (~2km margin)
+                    var filterBBox = null;
+                    if (bounds) {
+                        var margin = 0.02; // ~2km in degrees
+                        filterBBox = [
+                            bounds.getWest() - margin,
+                            bounds.getSouth() - margin,
+                            bounds.getEast() + margin,
+                            bounds.getNorth() + margin
+                        ];
                     }
 
                     function buildMunClipPath(ctx2) {
@@ -7677,17 +7713,17 @@
                         });
                     }
 
-                    // 1) Draw all layers in grayscale + faded (outside effect)
+                    // 1) Draw layers in grayscale + faded (outside effect) - filtered to municipio area
                     mapCtx.save();
                     mapCtx.filter = 'grayscale(1) opacity(0.35)';
-                    drawLayers(mapCtx, zoom, originX, originY);
+                    drawLayers(mapCtx, zoom, originX, originY, filterBBox);
                     mapCtx.restore();
 
                     // 2) Clip to municipio and redraw layers in full color (inside)
                     mapCtx.save();
                     buildMunClipPath(mapCtx);
                     mapCtx.clip();
-                    drawLayers(mapCtx, zoom, originX, originY);
+                    drawLayers(mapCtx, zoom, originX, originY, filterBBox);
                     mapCtx.restore();
 
                     // 3) Draw other municipio boundaries (dimmed)
@@ -7726,6 +7762,11 @@
 
                     var fname = 'PGTU_' + getMunicipioName(municipioNum).replace(/\s+/g, '_') + '_' + formatSel.toUpperCase();
                     exportCanvas(finalCanvas, fname, formatSel, callback);
+                  } catch (err) {
+                    console.error('Errore generazione municipio ' + municipioNum + ':', err);
+                    alert('Errore nella generazione della mappa: ' + err.message);
+                    callback(false);
+                  }
                 });
             }
 
@@ -7771,6 +7812,7 @@
                 mapCtx.fillRect(0, 0, pixW, mapH);
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
+                  try {
                     // Draw selected layers
                     drawLayers(mapCtx, zoom, originX, originY);
 
@@ -7801,6 +7843,11 @@
 
                     var fname = 'PGTU_Mappa_Completa_' + formatSel.toUpperCase();
                     exportCanvas(finalCanvas, fname, formatSel, callback);
+                  } catch (err) {
+                    console.error('Errore generazione mappa completa:', err);
+                    alert('Errore nella generazione della mappa: ' + err.message);
+                    callback(false);
+                  }
                 });
             }
 
