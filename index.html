@@ -7761,17 +7761,26 @@
                         });
                     }
 
-                    // 1) Draw layers in grayscale + faded (outside effect) - filtered to municipio area
+                    // Draw layers ONCE on a temporary canvas, then composite
+                    console.time('drawLayers-municipio');
+                    var layerCanvas = document.createElement('canvas');
+                    layerCanvas.width = pixW;
+                    layerCanvas.height = mapH;
+                    var layerCtx = layerCanvas.getContext('2d');
+                    drawLayers(layerCtx, zoom, originX, originY, filterBBox);
+                    console.timeEnd('drawLayers-municipio');
+
+                    // 1) Draw layers in grayscale + faded (outside effect)
                     mapCtx.save();
                     mapCtx.filter = 'grayscale(1) opacity(0.35)';
-                    drawLayers(mapCtx, zoom, originX, originY, filterBBox);
+                    mapCtx.drawImage(layerCanvas, 0, 0);
                     mapCtx.restore();
 
-                    // 2) Clip to municipio and redraw layers in full color (inside)
+                    // 2) Clip to municipio and draw layers in full color (inside)
                     mapCtx.save();
                     buildMunClipPath(mapCtx);
                     mapCtx.clip();
-                    drawLayers(mapCtx, zoom, originX, originY, filterBBox);
+                    mapCtx.drawImage(layerCanvas, 0, 0);
                     mapCtx.restore();
 
                     // 3) Draw other municipio boundaries (dimmed)
