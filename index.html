@@ -7085,29 +7085,63 @@
 
                 var totalTiles = (tileXmax - tileXmin + 1) * (tileYmax - tileYmin + 1);
                 var loaded = 0;
+                var callbackFired = false;
                 var subdomains = ['a', 'b', 'c'];
+
+                function finishIfDone() {
+                    if (!callbackFired && loaded >= totalTiles) {
+                        callbackFired = true;
+                        clearTimeout(globalTimeout);
+                        callback();
+                    }
+                }
 
                 if (totalTiles <= 0) { callback(); return; }
 
+                // Global timeout: if tiles haven't all loaded in 15s, proceed anyway
+                var globalTimeout = setTimeout(function() {
+                    if (!callbackFired) {
+                        console.warn('drawTiles: timeout globale raggiunto (' + loaded + '/' + totalTiles + ' tile caricate), proseguo...');
+                        callbackFired = true;
+                        callback();
+                    }
+                }, 15000);
+
                 for (var tx = tileXmin; tx <= tileXmax; tx++) {
                     for (var ty = tileYmin; ty <= tileYmax; ty++) {
-                        if (ty < 0 || ty >= n) { loaded++; if (loaded >= totalTiles) { callback(); } continue; }
+                        if (ty < 0 || ty >= n) { loaded++; finishIfDone(); continue; }
                         var txx = ((tx % n) + n) % n;
                         (function(tx2, ty2, txx2) {
                             var s = subdomains[(txx2 + ty2) % 3];
                             var img = new Image();
                             img.crossOrigin = 'anonymous';
+                            var tileHandled = false;
+                            // Per-tile timeout: 10 seconds
+                            var tileTimeout = setTimeout(function() {
+                                if (!tileHandled) {
+                                    tileHandled = true;
+                                    img.src = ''; // abort load
+                                    loaded++;
+                                    finishIfDone();
+                                }
+                            }, 10000);
                             img.onload = function() {
+                                if (tileHandled) return;
+                                tileHandled = true;
+                                clearTimeout(tileTimeout);
                                 // Position tile in canvas space (accounting for fractional zoom scaling)
                                 var dx = tx2 * effTileSize - originX;
                                 var dy = ty2 * effTileSize - originY;
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
                                 loaded++;
-                                if (loaded >= totalTiles) { callback(); }
+                                finishIfDone();
                             };
                             img.onerror = function() {
+                                if (tileHandled) return;
+                                tileHandled = true;
+                                clearTimeout(tileTimeout);
                                 loaded++;
-                                if (loaded >= totalTiles) { callback(); }
+                                finishIfDone();
                             };
                             // Use CartoDB Positron for clean, light basemap in printed maps
                             img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
@@ -7566,7 +7600,14 @@
 
                 if (outputFmt === 'jpeg') {
                     try {
+                        var jpegDone = false;
+                        var jpegTimeout = setTimeout(function() {
+                            if (!jpegDone) { jpegDone = true; console.error('toBlob JPEG timeout'); alert('Timeout nella generazione JPEG. Riduci il DPI.'); callback(false); }
+                        }, 30000);
                         finalCanvas.toBlob(function(blob) {
+                            if (jpegDone) return;
+                            jpegDone = true;
+                            clearTimeout(jpegTimeout);
                             if (!blob) { alert('Errore nella generazione JPEG. Riduci il DPI o il formato carta.'); callback(false); return; }
                             var url = URL.createObjectURL(blob);
                             var a = document.createElement('a');
@@ -7607,7 +7648,14 @@
                 } else {
                     // PNG (default)
                     try {
+                        var pngDone = false;
+                        var pngTimeout = setTimeout(function() {
+                            if (!pngDone) { pngDone = true; console.error('toBlob PNG timeout'); alert('Timeout nella generazione PNG. Riduci il DPI.'); callback(false); }
+                        }, 30000);
                         finalCanvas.toBlob(function(blob) {
+                            if (pngDone) return;
+                            pngDone = true;
+                            clearTimeout(pngTimeout);
                             if (!blob) { alert('Errore nella generazione PNG. Riduci il DPI o il formato carta.'); callback(false); return; }
                             var url = URL.createObjectURL(blob);
                             var a = document.createElement('a');
