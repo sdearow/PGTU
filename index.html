@@ -1218,7 +1218,13 @@
                             <option value="100000">1:100.000</option>
                             <option value="150000">1:150.000</option>
                             <option value="200000">1:200.000</option>
+                            <option value="custom">Personalizzata...</option>
                         </select>
+                        <div id="print-scale-custom" style="display:none;margin-top:4px;">
+                            <label style="font-size:11px;color:#555;">1 : </label>
+                            <input type="number" id="print-scale-custom-value" min="1000" max="1000000" step="1000" value="25000"
+                                style="width:90px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px;">
+                        </div>
                     </div>
                     <div>
                         <h4>Formato</h4>
@@ -6976,6 +6982,13 @@
                 'pl-frammenti': { toggle: 'toggle-frammenti', layer: function() { return layerFrammenti; } }
             };
 
+            // Custom scale toggle
+            var printScaleSel = document.getElementById('print-scale');
+            var printScaleCustomDiv = document.getElementById('print-scale-custom');
+            printScaleSel.addEventListener('change', function() {
+                printScaleCustomDiv.style.display = this.value === 'custom' ? 'block' : 'none';
+            });
+
             // Select all/none/current links
             document.getElementById('print-select-all').addEventListener('click', function(e) {
                 e.preventDefault();
@@ -7518,6 +7531,9 @@
                 var bounds = layer.getBounds();
                 var dpiSel = parseInt(document.getElementById('print-dpi').value) || 300;
                 var scaleSel = document.getElementById('print-scale').value;
+                if (scaleSel === 'custom') {
+                    scaleSel = document.getElementById('print-scale-custom-value').value || '25000';
+                }
                 var formatSel = document.getElementById('print-format').value;
                 var paper = paperSizes[formatSel] || paperSizes['a4'];
 
@@ -7599,14 +7615,14 @@
                         var num = l.feature.properties.Numero || l.feature.properties.Attuale || '';
                         if (String(num) !== String(municipioNum)) {
                             drawGeometry(mapCtx, l.feature.geometry, zoom, originX, originY,
-                                { color: '#999', weight: 1, opacity: 0.3, fill: false });
+                                { color: '#8e9eaf', weight: 1, opacity: 0.35, fill: false });
                         }
                     });
 
                     // 4) Draw selected municipio border prominently on top
                     if (munGeom) {
                         drawGeometry(mapCtx, munGeom, zoom, originX, originY,
-                            { color: '#c0392b', weight: 5, opacity: 1, fill: false });
+                            { color: '#5b7a9c', weight: 4, opacity: 0.85, fill: false });
                     }
 
                     // Assemble final canvas
@@ -7635,6 +7651,9 @@
                 var bounds = layerMunicipii.getBounds();
                 var dpiSel = parseInt(document.getElementById('print-dpi').value) || 300;
                 var scaleSel = document.getElementById('print-scale').value;
+                if (scaleSel === 'custom') {
+                    scaleSel = document.getElementById('print-scale-custom-value').value || '25000';
+                }
                 var formatSel = document.getElementById('print-format').value;
                 var paper = paperSizes[formatSel] || paperSizes['a4'];
 
@@ -7675,7 +7694,7 @@
                     // Draw all municipality boundaries on top
                     layerMunicipii.eachLayer(function(l) {
                         drawGeometry(mapCtx, l.feature.geometry, zoom, originX, originY,
-                            { color: '#2c3e50', weight: 3, opacity: 0.9, fill: false });
+                            { color: '#7a8fa3', weight: 2.5, opacity: 0.7, fill: false });
                     });
 
                     // Assemble final canvas
