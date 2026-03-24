@@ -7067,16 +7067,27 @@
             }
 
             // Load OSM tiles for given bounds/zoom onto canvas
+            // Supports fractional zoom: loads tiles at nearest integer zoom and scales them
             function drawTiles(ctx, zoom, originX, originY, canvasW, canvasH, callback) {
-                var n = Math.pow(2, zoom);
-                var tileXmin = Math.floor(originX / 256);
-                var tileXmax = Math.floor((originX + canvasW) / 256);
-                var tileYmin = Math.floor(originY / 256);
-                var tileYmax = Math.floor((originY + canvasH) / 256);
+                var zTile = Math.round(zoom);               // integer zoom for tile URLs
+                var tileScale = Math.pow(2, zoom - zTile);  // scale factor (1.0 if zoom is integer)
+                var effTileSize = 256 * tileScale;           // effective tile size in canvas pixels
+
+                // Convert canvas origin to tile-zoom pixel space
+                var tileOriginX = originX / tileScale;
+                var tileOriginY = originY / tileScale;
+
+                var n = Math.pow(2, zTile);
+                var tileXmin = Math.floor(tileOriginX / 256);
+                var tileXmax = Math.floor((tileOriginX + canvasW / tileScale) / 256);
+                var tileYmin = Math.floor(tileOriginY / 256);
+                var tileYmax = Math.floor((tileOriginY + canvasH / tileScale) / 256);
 
                 var totalTiles = (tileXmax - tileXmin + 1) * (tileYmax - tileYmin + 1);
                 var loaded = 0;
                 var subdomains = ['a', 'b', 'c'];
+
+                if (totalTiles <= 0) { callback(); return; }
 
                 for (var tx = tileXmin; tx <= tileXmax; tx++) {
                     for (var ty = tileYmin; ty <= tileYmax; ty++) {
@@ -7087,9 +7098,10 @@
                             var img = new Image();
                             img.crossOrigin = 'anonymous';
                             img.onload = function() {
-                                var dx = tx2 * 256 - originX;
-                                var dy = ty2 * 256 - originY;
-                                ctx.drawImage(img, Math.round(dx), Math.round(dy), 256, 256);
+                                // Position tile in canvas space (accounting for fractional zoom scaling)
+                                var dx = tx2 * effTileSize - originX;
+                                var dy = ty2 * effTileSize - originY;
+                                ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
                                 loaded++;
                                 if (loaded >= totalTiles) { callback(); }
                             };
@@ -7098,7 +7110,7 @@
                                 if (loaded >= totalTiles) { callback(); }
                             };
                             // Use CartoDB Positron for clean, light basemap in printed maps
-                            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + txx2 + '/' + ty2 + '.png';
+                            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
                         })(tx, ty, txx);
                     }
                 }
@@ -7252,11 +7264,12 @@
             // Compute zoom level from a cartographic scale (e.g. 50000 for 1:50000)
             // Uses the relation: groundRes = 25.4 * scale / (dpi * 1000) meters/pixel
             // and: groundRes = C * cos(lat) / (256 * 2^z) where C = 40075016.686 m
+            // Returns a fractional zoom for exact scale matching
             function computeZoomFromScale(scale, dpi, lat) {
                 var C = 40075016.686; // Earth circumference in meters
                 var cosLat = Math.cos(lat * Math.PI / 180);
                 var z = Math.log2(C * cosLat * dpi * 1000 / (256 * 25.4 * scale));
-                return Math.max(1, Math.min(18, Math.round(z)));
+                return Math.max(1, Math.min(20, z));
             }
 
             // Build legend items with classification sub-colors for PGTU and Grafo2026
@@ -7444,6 +7457,73 @@
                 return { headerH: headerH, footerH: footerH };
             }
 
+            // Draw a graphical scale bar on the map canvas
+            // zoom: fractional zoom used for rendering, dpi: print resolution,
+            // lat: center latitude, mapCtx: map canvas context, mapW/mapH: map canvas size
+            function drawScaleBar(mapCtx, zoom, dpi, lat, mapW, mapH) {
+                var C = 40075016.686;
+                var cosLat = Math.cos(lat * Math.PI / 180);
+                // Ground resolution in meters per pixel at this fractional zoom & DPI
+                var groundRes = C * cosLat / (256 * Math.pow(2, zoom));
+
+                // Target bar length: ~15% of map width in pixels
+                var targetBarPx = mapW * 0.15;
+                var targetMeters = targetBarPx * groundRes;
+
+                // Choose a nice round distance
+                var niceDistances = [
+                    10, 20, 25, 50, 100, 200, 250, 500,
+                    1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000
+                ];
+                var bestDist = niceDistances[0];
+                for (var i = 0; i < niceDistances.length; i++) {
+                    if (niceDistances[i] <= targetMeters * 1.5) bestDist = niceDistances[i];
+                }
+
+                var barPx = bestDist / groundRes;
+                var label = bestDist >= 1000 ? (bestDist / 1000) + ' km' : bestDist + ' m';
+
+                // Position: bottom-right of map area with margin
+                var barH = Math.max(6, Math.round(mapH * 0.005));
+                var margin = Math.round(mapW * 0.02);
+                var barX = mapW - margin - barPx;
+                var barY = mapH - margin - barH;
+                var fontSize = Math.max(10, Math.round(mapH * 0.012));
+
+                // Semi-transparent background
+                var bgPad = Math.round(fontSize * 0.5);
+                mapCtx.fillStyle = 'rgba(255,255,255,0.85)';
+                mapCtx.fillRect(
+                    barX - bgPad, barY - fontSize - bgPad * 1.5,
+                    barPx + bgPad * 2, barH + fontSize + bgPad * 2.5
+                );
+
+                // Bar outline
+                mapCtx.fillStyle = '#333333';
+                mapCtx.fillRect(barX, barY, barPx, barH);
+                // Alternating black/white sections (2 halves)
+                var halfPx = barPx / 2;
+                mapCtx.fillStyle = '#ffffff';
+                mapCtx.fillRect(barX + halfPx, barY, halfPx, barH);
+                // Border
+                mapCtx.strokeStyle = '#333333';
+                mapCtx.lineWidth = 1;
+                mapCtx.strokeRect(barX, barY, barPx, barH);
+                mapCtx.beginPath();
+                mapCtx.moveTo(barX + halfPx, barY);
+                mapCtx.lineTo(barX + halfPx, barY + barH);
+                mapCtx.stroke();
+
+                // Tick marks and labels
+                mapCtx.fillStyle = '#333333';
+                mapCtx.font = 'bold ' + fontSize + 'px sans-serif';
+                mapCtx.textBaseline = 'bottom';
+                mapCtx.textAlign = 'left';
+                mapCtx.fillText('0', barX, barY - 3);
+                mapCtx.textAlign = 'right';
+                mapCtx.fillText(label, barX + barPx, barY - 3);
+            }
+
             // Maximum canvas area (pixels) browsers can reliably handle for toDataURL/toBlob
             var MAX_CANVAS_AREA = 16384 * 16384; // ~268 megapixels
 
@@ -7625,6 +7705,9 @@
                             { color: '#5b7a9c', weight: 4, opacity: 0.85, fill: false });
                     }
 
+                    // 5) Draw scale bar on map canvas
+                    drawScaleBar(mapCtx, zoom, dpiSel, centerLat, pixW, mapH);
+
                     // Assemble final canvas
                     var finalCanvas = document.createElement('canvas');
                     finalCanvas.width = pixW;
@@ -7696,6 +7779,9 @@
                         drawGeometry(mapCtx, l.feature.geometry, zoom, originX, originY,
                             { color: '#7a8fa3', weight: 2.5, opacity: 0.7, fill: false });
                     });
+
+                    // Draw scale bar on map canvas
+                    drawScaleBar(mapCtx, zoom, dpiSel, centerLat, pixW, mapH);
 
                     // Assemble final canvas
                     var finalCanvas = document.createElement('canvas');
