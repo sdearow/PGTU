@@ -2814,12 +2814,22 @@
             return (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom);
         }
 
-        function loadTileImage(tileUrl) {
+        function loadTileImage(tileUrl, fallbackUrl) {
             return new Promise(function(resolve) {
                 var img = new Image();
                 img.crossOrigin = 'anonymous';
                 img.onload = function() { resolve(img); };
-                img.onerror = function() { resolve(null); };
+                img.onerror = function() {
+                    if (fallbackUrl) {
+                        var img2 = new Image();
+                        img2.crossOrigin = 'anonymous';
+                        img2.onload = function() { resolve(img2); };
+                        img2.onerror = function() { resolve(null); };
+                        img2.src = fallbackUrl;
+                    } else {
+                        resolve(null);
+                    }
+                };
                 img.src = tileUrl;
             });
         }
@@ -2899,9 +2909,9 @@
                     for (var ty = tileY0; ty <= tileY1; ty++) {
                         (function(tx, ty) {
                             var s = ['a','b','c'][(tx + ty) % 3];
-                            // Use CartoDB Positron for clean basemap in printed maps
-                            var url = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
-                            tilePromises.push(loadTileImage(url).then(function(img) {
+                            var osmUrl = 'https://tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
+                            var fallbackUrl = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
+                            tilePromises.push(loadTileImage(osmUrl, fallbackUrl).then(function(img) {
                                 return { img: img, tx: tx, ty: ty };
                             }));
                         })(tx, ty);
@@ -2909,7 +2919,7 @@
                 }
 
                 Promise.all(tilePromises).then(function(tiles) {
-                    // Draw tiles (CartoDB Positron is already a clean light basemap)
+                    // Draw tiles (OSM with CartoDB fallback)
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -7139,13 +7149,30 @@
                             };
                             img.onerror = function() {
                                 if (tileHandled) return;
-                                tileHandled = true;
-                                clearTimeout(tileTimeout);
-                                loaded++;
-                                finishIfDone();
+                                // Fallback to CartoDB if OSM fails
+                                var fallback = new Image();
+                                fallback.crossOrigin = 'anonymous';
+                                fallback.onload = function() {
+                                    if (tileHandled) return;
+                                    tileHandled = true;
+                                    clearTimeout(tileTimeout);
+                                    var dx = tx2 * effTileSize - originX;
+                                    var dy = ty2 * effTileSize - originY;
+                                    ctx.drawImage(fallback, dx, dy, effTileSize, effTileSize);
+                                    loaded++;
+                                    finishIfDone();
+                                };
+                                fallback.onerror = function() {
+                                    if (tileHandled) return;
+                                    tileHandled = true;
+                                    clearTimeout(tileTimeout);
+                                    loaded++;
+                                    finishIfDone();
+                                };
+                                fallback.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
                             };
-                            // Use CartoDB Positron for clean, light basemap in printed maps
-                            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
+                            // Use OSM tiles with CartoDB fallback
+                            img.src = 'https://tile.openstreetmap.org/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
                         })(tx, ty, txx);
                     }
                 }
