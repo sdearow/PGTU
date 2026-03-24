@@ -4,13 +4,13 @@ var wms_layers = [];
 
 
         var lyr_OpenStreetMap_0 = new ol.layer.Tile({
-            'title': 'CartoDB Dark',
+            'title': 'OpenStreetMap',
             'opacity': 1.000000,
 
 
             source: new ol.source.XYZ({
-            attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
-                url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+            attributions: ' ',
+                url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
             })
         });
 var format_Municipi_1 = new ol.format.GeoJSON();

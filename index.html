@@ -7723,6 +7723,10 @@
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
                   try {
+                    // Darken basemap slightly for better print contrast
+                    mapCtx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                    mapCtx.fillRect(0, 0, pixW, mapH);
+
                     // Build clip path for selected municipio (buffered ~50m for border roads)
                     var munLayer = getMunicipioLayer(municipioNum);
                     var munGeom = null;
@@ -7870,6 +7874,10 @@
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
                   try {
+                    // Darken basemap slightly for better print contrast
+                    mapCtx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+                    mapCtx.fillRect(0, 0, pixW, mapH);
+
                     // Draw selected layers
                     drawLayers(mapCtx, zoom, originX, originY);
 
