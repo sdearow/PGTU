@@ -7402,6 +7402,13 @@
                         entries.forEach(function(e) {
                             items.push({ color: e.color, label: '  ' + e.label, indent: true });
                         });
+                        // For Grafo 2026, add dashed Aggiunte classification entries
+                        if (id === 'pl-grafo2026') {
+                            items.push({ header: true, label: '  Aggiunte' });
+                            aggiunteEntries.forEach(function(e) {
+                                items.push({ color: e.color, label: '  ' + e.label, indent: true, dashed: true });
+                            });
+                        }
                     } else if (id === 'pl-proposte-ins') {
                         // Aggiunte: show dashed lines in classification colors
                         items.push({ header: true, label: 'Aggiunte' });
