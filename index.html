@@ -2203,7 +2203,7 @@
             if (typeof rebuildGrafo2026 === 'function') {
                 // Reset grafo cache so next access rebuilds from scratch
                 grafo2026Features = null;
-                if (grafo2026Active) rebuildGrafo2026();
+                rebuildGrafo2026();
                 // Recompute classification disconnections if active (skip if imported)
                 if (!discClassImported) {
                     if (typeof discClassComputed !== 'undefined' && document.getElementById('toggle-disc-classificazione') && document.getElementById('toggle-disc-classificazione').checked) {
