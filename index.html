@@ -2899,7 +2899,7 @@
                     for (var ty = tileY0; ty <= tileY1; ty++) {
                         (function(tx, ty) {
                             var s = ['a','b','c'][(tx + ty) % 3];
-                            var url = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
+                            var url = 'https://' + s + '.basemaps.cartocdn.com/rastertiles/voyager/' + zoom + '/' + tx + '/' + ty + '.png';
                             tilePromises.push(loadTileImage(url).then(function(img) {
                                 return { img: img, tx: tx, ty: ty };
                             }));
@@ -2908,8 +2908,8 @@
                 }
 
                 Promise.all(tilePromises).then(function(tiles) {
-                    // Draw tiles with enhanced contrast for print readability
-                    ctx.filter = 'saturate(0) contrast(1.6) brightness(0.82)';
+                    // Draw tiles as B&W with light contrast boost
+                    ctx.filter = 'saturate(0) contrast(1.2)';
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -7131,8 +7131,8 @@
                                 if (tileHandled) return;
                                 tileHandled = true;
                                 clearTimeout(tileTimeout);
-                                // Draw tile with enhanced contrast for print readability
-                                ctx.filter = 'saturate(0) contrast(1.6) brightness(0.82)';
+                                // Draw tile as B&W with light contrast boost
+                                ctx.filter = 'saturate(0) contrast(1.2)';
                                 var dx = tx2 * effTileSize - originX;
                                 var dy = ty2 * effTileSize - originY;
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
@@ -7147,7 +7147,7 @@
                                 loaded++;
                                 finishIfDone();
                             };
-                            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
+                            img.src = 'https://' + s + '.basemaps.cartocdn.com/rastertiles/voyager/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
                         })(tx, ty, txx);
                     }
                 }
@@ -7726,9 +7726,7 @@
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
                   try {
-                    // Darken basemap slightly for better print contrast
-                    mapCtx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-                    mapCtx.fillRect(0, 0, pixW, mapH);
+                    // (basemap contrast is handled by the tile filter)
 
                     // Build clip path for selected municipio (buffered ~50m for border roads)
                     var munLayer = getMunicipioLayer(municipioNum);
@@ -7877,9 +7875,7 @@
 
                 drawTiles(mapCtx, zoom, originX, originY, pixW, mapH, function() {
                   try {
-                    // Darken basemap slightly for better print contrast
-                    mapCtx.fillStyle = 'rgba(0, 0, 0, 0.15)';
-                    mapCtx.fillRect(0, 0, pixW, mapH);
+                    // (basemap contrast is handled by the tile filter)
 
                     // Draw selected layers
                     drawLayers(mapCtx, zoom, originX, originY);
