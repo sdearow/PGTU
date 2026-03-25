@@ -1377,12 +1377,11 @@
             wheelDebounceTime: 80
         });
 
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
         }).addTo(map);
-        // Convert OSM tiles to high-contrast B&W
-        document.querySelector('.leaflet-tile-pane').style.filter = 'saturate(0) contrast(1.3)';
 
         // Custom pane for background layers (above tiles at 200, below overlays at 400)
         map.createPane('backgroundPane');
@@ -7068,8 +7067,9 @@
                 return { x: x - originX, y: y - originY };
             }
 
-            // Load OSM tiles for given bounds/zoom onto canvas
+            // Load CartoDB Positron tiles for given bounds/zoom onto canvas
             // Supports fractional zoom: loads tiles at nearest integer zoom and scales them
+            // Retries failed tiles up to 2 times before skipping
             function drawTiles(ctx, zoom, originX, originY, canvasW, canvasH, callback) {
                 var zTile = Math.round(zoom);               // integer zoom for tile URLs
                 var tileScale = Math.pow(2, zoom - zTile);  // scale factor (1.0 if zoom is integer)
@@ -7088,7 +7088,7 @@
                 var totalTiles = (tileXmax - tileXmin + 1) * (tileYmax - tileYmin + 1);
                 var loaded = 0;
                 var callbackFired = false;
-                var subdomains = ['a', 'b', 'c'];
+                var subdomains = ['a', 'b', 'c', 'd'];
 
                 function finishIfDone() {
                     if (!callbackFired && loaded >= totalTiles) {
@@ -7100,35 +7100,40 @@
 
                 if (totalTiles <= 0) { callback(); return; }
 
-                // Global timeout: if tiles haven't all loaded in 30s, proceed anyway
+                // Global timeout: if tiles haven't all loaded in 60s, proceed anyway
                 var globalTimeout = setTimeout(function() {
                     if (!callbackFired) {
                         console.warn('drawTiles: timeout globale raggiunto (' + loaded + '/' + totalTiles + ' tile caricate), proseguo...');
                         callbackFired = true;
                         callback();
                     }
-                }, 30000);
+                }, 60000);
 
-                // Build tile queue and load in batches to avoid 403 rate limiting
+                // Build tile queue and load in batches
                 var tileQueue = [];
                 for (var tx = tileXmin; tx <= tileXmax; tx++) {
                     for (var ty = tileYmin; ty <= tileYmax; ty++) {
                         if (ty < 0 || ty >= n) { loaded++; finishIfDone(); continue; }
                         var txx = ((tx % n) + n) % n;
-                        tileQueue.push({ tx: tx, ty: ty, txx: txx });
+                        tileQueue.push({ tx: tx, ty: ty, txx: txx, retries: 0 });
                     }
                 }
 
-                var MAX_CONCURRENT = 6;
+                var MAX_CONCURRENT = 8;
+                var MAX_RETRIES = 2;
                 var queueIdx = 0;
                 var active = 0;
+
+                function getTileUrl(s, z, x, y) {
+                    return 'https://' + s + '.basemaps.cartocdn.com/light_all/' + z + '/' + x + '/' + y + '.png';
+                }
 
                 function loadNextTile() {
                     while (active < MAX_CONCURRENT && queueIdx < tileQueue.length) {
                         var t = tileQueue[queueIdx++];
                         active++;
-                        (function(tx2, ty2, txx2) {
-                            var s = subdomains[(txx2 + ty2) % 3];
+                        (function(tile) {
+                            var s = subdomains[(tile.txx + tile.ty) % 4];
                             var img = new Image();
                             img.crossOrigin = 'anonymous';
                             var tileHandled = false;
@@ -7136,21 +7141,28 @@
                                 if (!tileHandled) {
                                     tileHandled = true;
                                     img.src = '';
-                                    loaded++; active--;
-                                    finishIfDone();
-                                    loadNextTile();
+                                    // Retry on timeout
+                                    if (tile.retries < MAX_RETRIES) {
+                                        tile.retries++;
+                                        active--;
+                                        tileQueue.push(tile);
+                                        loadNextTile();
+                                    } else {
+                                        console.warn('Tile timeout after retries: ' + zTile + '/' + tile.txx + '/' + tile.ty);
+                                        loaded++; active--;
+                                        finishIfDone();
+                                        loadNextTile();
+                                    }
                                 }
-                            }, 10000);
+                            }, 15000);
                             img.onload = function() {
                                 if (tileHandled) return;
                                 tileHandled = true;
                                 clearTimeout(tileTimeout);
-                                // Draw tile as B&W (matching interactive map)
-                                ctx.filter = 'saturate(0) contrast(1.3)';
-                                var dx = tx2 * effTileSize - originX;
-                                var dy = ty2 * effTileSize - originY;
+                                // CartoDB Positron is already light grayscale - draw directly
+                                var dx = tile.tx * effTileSize - originX;
+                                var dy = tile.ty * effTileSize - originY;
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
-                                ctx.filter = 'none';
                                 loaded++; active--;
                                 finishIfDone();
                                 loadNextTile();
@@ -7159,12 +7171,21 @@
                                 if (tileHandled) return;
                                 tileHandled = true;
                                 clearTimeout(tileTimeout);
-                                loaded++; active--;
-                                finishIfDone();
-                                loadNextTile();
+                                // Retry on error
+                                if (tile.retries < MAX_RETRIES) {
+                                    tile.retries++;
+                                    active--;
+                                    tileQueue.push(tile);
+                                    setTimeout(loadNextTile, 500 * tile.retries);
+                                } else {
+                                    console.warn('Tile failed after retries: ' + zTile + '/' + tile.txx + '/' + tile.ty);
+                                    loaded++; active--;
+                                    finishIfDone();
+                                    loadNextTile();
+                                }
                             };
-                            img.src = 'https://' + s + '.tile.openstreetmap.org/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
-                        })(t.tx, t.ty, t.txx);
+                            img.src = getTileUrl(s, zTile, tile.txx, tile.ty);
+                        })(t);
                     }
                 }
                 loadNextTile();
