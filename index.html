@@ -1377,8 +1377,9 @@
             wheelDebounceTime: 80
         });
 
-        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+            subdomains: 'abcd',
             maxZoom: 19
         }).addTo(map);
 
@@ -2896,8 +2897,8 @@
                 for (var tx = tileX0; tx <= tileX1; tx++) {
                     for (var ty = tileY0; ty <= tileY1; ty++) {
                         (function(tx, ty) {
-                            var s = ['a','b','c'][(tx + ty) % 3];
-                            var url = 'https://' + s + '.tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
+                            var s = ['a','b','c','d'][(tx + ty) % 4];
+                            var url = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
                             tilePromises.push(loadTileImage(url).then(function(img) {
                                 return { img: img, tx: tx, ty: ty };
                             }));
@@ -2906,8 +2907,7 @@
                 }
 
                 Promise.all(tilePromises).then(function(tiles) {
-                    // Draw tiles as B&W (matching interactive map)
-                    ctx.filter = 'saturate(0) contrast(1.3)';
+                    // Draw tiles (CartoDB Positron is already light grayscale)
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -2918,7 +2918,6 @@
                         var dh = 256 * scaleF;
                         ctx.drawImage(t.img, dx, dy, dw, dh);
                     });
-                    ctx.filter = 'none';
 
                     // Draw municipio boundary
                     if (munGeom) {
