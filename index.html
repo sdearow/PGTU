@@ -2908,8 +2908,8 @@
                 }
 
                 Promise.all(tilePromises).then(function(tiles) {
-                    // Draw tiles with light contrast boost
-                    ctx.filter = 'contrast(1.1)';
+                    // CartoDB Positron is already B&W-ish, just light contrast boost
+                    ctx.filter = 'contrast(1.15)';
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -7131,8 +7131,8 @@
                                 if (tileHandled) return;
                                 tileHandled = true;
                                 clearTimeout(tileTimeout);
-                                // Draw tile with light contrast boost
-                                ctx.filter = 'contrast(1.1)';
+                                // CartoDB Positron is already B&W-ish, just light contrast boost
+                                ctx.filter = 'contrast(1.15)';
                                 var dx = tx2 * effTileSize - originX;
                                 var dy = ty2 * effTileSize - originY;
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
