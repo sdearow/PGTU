@@ -2899,7 +2899,7 @@
                     for (var ty = tileY0; ty <= tileY1; ty++) {
                         (function(tx, ty) {
                             var s = ['a','b','c'][(tx + ty) % 3];
-                            var url = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
+                            var url = 'https://' + s + '.tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
                             tilePromises.push(loadTileImage(url).then(function(img) {
                                 return { img: img, tx: tx, ty: ty };
                             }));
@@ -2908,8 +2908,8 @@
                 }
 
                 Promise.all(tilePromises).then(function(tiles) {
-                    // CartoDB Positron is already B&W-ish, just light contrast boost
-                    ctx.filter = 'contrast(1.15)';
+                    // Draw tiles as B&W (matching interactive map)
+                    ctx.filter = 'saturate(0) contrast(1.3)';
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -7100,58 +7100,74 @@
 
                 if (totalTiles <= 0) { callback(); return; }
 
-                // Global timeout: if tiles haven't all loaded in 15s, proceed anyway
+                // Global timeout: if tiles haven't all loaded in 30s, proceed anyway
                 var globalTimeout = setTimeout(function() {
                     if (!callbackFired) {
                         console.warn('drawTiles: timeout globale raggiunto (' + loaded + '/' + totalTiles + ' tile caricate), proseguo...');
                         callbackFired = true;
                         callback();
                     }
-                }, 15000);
+                }, 30000);
 
+                // Build tile queue and load in batches to avoid 403 rate limiting
+                var tileQueue = [];
                 for (var tx = tileXmin; tx <= tileXmax; tx++) {
                     for (var ty = tileYmin; ty <= tileYmax; ty++) {
                         if (ty < 0 || ty >= n) { loaded++; finishIfDone(); continue; }
                         var txx = ((tx % n) + n) % n;
+                        tileQueue.push({ tx: tx, ty: ty, txx: txx });
+                    }
+                }
+
+                var MAX_CONCURRENT = 6;
+                var queueIdx = 0;
+                var active = 0;
+
+                function loadNextTile() {
+                    while (active < MAX_CONCURRENT && queueIdx < tileQueue.length) {
+                        var t = tileQueue[queueIdx++];
+                        active++;
                         (function(tx2, ty2, txx2) {
                             var s = subdomains[(txx2 + ty2) % 3];
                             var img = new Image();
                             img.crossOrigin = 'anonymous';
                             var tileHandled = false;
-                            // Per-tile timeout: 10 seconds
                             var tileTimeout = setTimeout(function() {
                                 if (!tileHandled) {
                                     tileHandled = true;
-                                    img.src = ''; // abort load
-                                    loaded++;
+                                    img.src = '';
+                                    loaded++; active--;
                                     finishIfDone();
+                                    loadNextTile();
                                 }
                             }, 10000);
                             img.onload = function() {
                                 if (tileHandled) return;
                                 tileHandled = true;
                                 clearTimeout(tileTimeout);
-                                // CartoDB Positron is already B&W-ish, just light contrast boost
-                                ctx.filter = 'contrast(1.15)';
+                                // Draw tile as B&W (matching interactive map)
+                                ctx.filter = 'saturate(0) contrast(1.3)';
                                 var dx = tx2 * effTileSize - originX;
                                 var dy = ty2 * effTileSize - originY;
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
                                 ctx.filter = 'none';
-                                loaded++;
+                                loaded++; active--;
                                 finishIfDone();
+                                loadNextTile();
                             };
                             img.onerror = function() {
                                 if (tileHandled) return;
                                 tileHandled = true;
                                 clearTimeout(tileTimeout);
-                                loaded++;
+                                loaded++; active--;
                                 finishIfDone();
+                                loadNextTile();
                             };
-                            img.src = 'https://' + s + '.basemaps.cartocdn.com/light_all/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
-                        })(tx, ty, txx);
+                            img.src = 'https://' + s + '.tile.openstreetmap.org/' + zTile + '/' + txx2 + '/' + ty2 + '.png';
+                        })(t.tx, t.ty, t.txx);
                     }
                 }
-                if (totalTiles === 0) { callback(); }
+                loadNextTile();
             }
 
             // Draw a single GeoJSON geometry on canvas
@@ -7294,15 +7310,28 @@
                     'pl-disconnessioni', 'pl-disc-class', 'pl-disc-estrema', 'pl-frammenti'
                 ];
 
+                // Layers that should be drawn thicker for print clarity
+                var thickerLayers = {
+                    'pl-grafo2026': true,
+                    'pl-proposte-elim': true,
+                    'pl-proposte-ins': true
+                };
+
                 drawOrder.forEach(function(id) {
                     if (!document.getElementById(id).checked) return;
                     var info = printLayerMap[id];
                     var lyr = info.layer();
                     if (!lyr) return;
                     var items = collectLeafletLayers(lyr);
+                    var thicken = thickerLayers[id];
                     items.forEach(function(item) {
                         if (!geomIntersectsBBox(item.geom, filterBBox)) return;
-                        drawGeometry(ctx, item.geom, zoom, originX, originY, item.style);
+                        var style = item.style;
+                        if (thicken && style.weight) {
+                            style = Object.assign({}, style);
+                            style.weight = style.weight * 1.8;
+                        }
+                        drawGeometry(ctx, item.geom, zoom, originX, originY, style);
                     });
                 });
             }
@@ -7514,7 +7543,7 @@
                 ctx.font = footerFontSize + 'px sans-serif';
                 ctx.textBaseline = 'middle';
                 var dateStr = new Date().toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: CartoDB Positron \u00a9 OpenStreetMap contributors',
+                ctx.fillText('PGTU Roma Capitale - Generato il ' + dateStr + ' | Base cartografica: \u00a9 OpenStreetMap contributors',
                     Math.round(footerH * 0.3), pixH - Math.round(footerH * 0.5));
 
                 return { headerH: headerH, footerH: footerH };
