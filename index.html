@@ -1679,13 +1679,13 @@
                     var classifica = (f.properties.Classifica || '').toUpperCase();
                     if (classifica !== 'A') return;
                     var geoLayer = L.geoJSON(f.geometry, {
-                        style: function() { return { color: '#000000', weight: 3.5, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }; }
+                        style: function() { return { color: '#555555', weight: 3.5, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }; }
                     });
                     var name = f.properties.Toponomast || f.properties.Nome || 'Arco senza nome';
                     var html = '<div class="popup-title">' + name + '</div>';
-                    html += '<span class="popup-layer-badge" style="background:#000000;">Autostrada (da Annesso D)</span>';
+                    html += '<span class="popup-layer-badge" style="background:#555555;">Autostrada (da Annesso D)</span>';
                     html += '<table class="popup-table">';
-                    html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#000;color:white;">Autostrada</th></tr>';
+                    html += '<tr><th colspan="2" style="font-size:13px;padding:6px 8px;background:#555;color:white;">Autostrada</th></tr>';
                     html += popupRow('Classificazione', 'Autostrade (A)');
                     if (f.properties.Limiti) html += popupRow('Limiti', f.properties.Limiti);
                     if (f.properties.Municipio && f.properties.Municipio !== '-') html += popupRow('Municipio', f.properties.Municipio);
