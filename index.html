@@ -2950,9 +2950,9 @@
 
                     // Draw municipio boundary
                     if (munGeom) {
-                        ctx.strokeStyle = 'rgba(44,62,80,0.6)';
+                        ctx.strokeStyle = 'rgba(44,62,80,0.7)';
                         ctx.fillStyle = 'rgba(0,121,255,0.1)';
-                        ctx.lineWidth = 2.5;
+                        ctx.lineWidth = 3.5;
                         function drawPolygonRings(rings) {
                             rings.forEach(function(ring) {
                                 ctx.beginPath();
@@ -2982,19 +2982,19 @@
                             var cx = projX(p.geometry.coordinates[0]);
                             var cy = projY(p.geometry.coordinates[1]);
                             ctx.beginPath();
-                            ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                            ctx.arc(cx, cy, 9, 0, Math.PI * 2);
                             ctx.fillStyle = typeColor;
                             ctx.globalAlpha = 0.9;
                             ctx.fill();
                             ctx.globalAlpha = 1;
                             ctx.strokeStyle = '#fff';
-                            ctx.lineWidth = 2.5;
+                            ctx.lineWidth = 3;
                             ctx.stroke();
                         } else if (p.geometry) {
                             ctx.strokeStyle = lineColor;
-                            ctx.lineWidth = 3;
+                            ctx.lineWidth = 5;
                             ctx.globalAlpha = 0.9;
-                            ctx.setLineDash([8, 5]);
+                            ctx.setLineDash([10, 6]);
                             function drawLineCoords(coords) {
                                 ctx.beginPath();
                                 coords.forEach(function(c, i) {
@@ -3020,8 +3020,8 @@
                     ctx.font = '10px sans-serif';
                     // Dashed red line for Eliminazione
                     ctx.strokeStyle = '#e74c3c';
-                    ctx.lineWidth = 3;
-                    ctx.setLineDash([4, 3]);
+                    ctx.lineWidth = 4;
+                    ctx.setLineDash([5, 3]);
                     ctx.beginPath();
                     ctx.moveTo(pad, legendY - 5);
                     ctx.lineTo(pad + 16, legendY - 5);
@@ -3031,8 +3031,8 @@
                     ctx.fillText('Eliminazione', pad + 20, legendY);
                     // Dashed green line for Aggiunta
                     ctx.strokeStyle = '#006400';
-                    ctx.lineWidth = 3;
-                    ctx.setLineDash([4, 3]);
+                    ctx.lineWidth = 4;
+                    ctx.setLineDash([5, 3]);
                     ctx.beginPath();
                     ctx.moveTo(pad + 100, legendY - 5);
                     ctx.lineTo(pad + 116, legendY - 5);
@@ -7358,11 +7358,27 @@
                     'pl-disconnessioni', 'pl-disc-class', 'pl-disc-estrema', 'pl-frammenti'
                 ];
 
-                // Layers that should be drawn thicker for print clarity
-                var thickerLayers = {
-                    'pl-grafo2026': true,
-                    'pl-proposte-elim': true,
-                    'pl-proposte-ins': true
+                // Print weight multipliers per layer for better visibility
+                var printWeightMultiplier = {
+                    'pl-pgtu': 2.2,
+                    'pl-pgtu-black': 2.2,
+                    'pl-grafo2026': 2.2,
+                    'pl-proposte-elim': 2.5,
+                    'pl-proposte-ins': 2.5,
+                    'pl-extraurbane-altri': 2.0,
+                    'pl-extraurbane-cdr': 2.0,
+                    'pl-centri-abitati': 1.8,
+                    'pl-low-traffic': 2.0,
+                    'pl-high-traffic': 2.0,
+                    'pl-atac': 2.0,
+                    'pl-tpl3': 2.0,
+                    'pl-tpl5': 2.0,
+                    'pl-tpl5-no-pgtu': 2.0,
+                    'pl-pgtu-no-tpl5': 2.0,
+                    'pl-disconnessioni': 2.2,
+                    'pl-disc-class': 2.2,
+                    'pl-disc-estrema': 2.2,
+                    'pl-frammenti': 2.0
                 };
 
                 drawOrder.forEach(function(id) {
@@ -7371,13 +7387,13 @@
                     var lyr = info.layer();
                     if (!lyr) return;
                     var items = collectLeafletLayers(lyr);
-                    var thicken = thickerLayers[id];
+                    var multiplier = printWeightMultiplier[id] || 1.8;
                     items.forEach(function(item) {
                         if (!geomIntersectsBBox(item.geom, filterBBox)) return;
                         var style = item.style;
-                        if (thicken && style.weight) {
+                        if (style.weight) {
                             style = Object.assign({}, style);
-                            style.weight = style.weight * 1.8;
+                            style.weight = style.weight * multiplier;
                         }
                         drawGeometry(ctx, item.geom, zoom, originX, originY, style);
                     });
