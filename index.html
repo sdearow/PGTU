@@ -2815,12 +2815,21 @@
             return (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * 256 * Math.pow(2, zoom);
         }
 
-        function loadTileImage(tileUrl) {
+        function loadTileImage(tileUrl, retries) {
+            if (retries === undefined) retries = 3;
             return new Promise(function(resolve) {
                 var img = new Image();
                 img.crossOrigin = 'anonymous';
                 img.onload = function() { resolve(img); };
-                img.onerror = function() { resolve(null); };
+                img.onerror = function() {
+                    if (retries > 0) {
+                        setTimeout(function() {
+                            loadTileImage(tileUrl, retries - 1).then(resolve);
+                        }, 500 * (4 - retries));
+                    } else {
+                        resolve(null);
+                    }
+                };
                 img.src = tileUrl;
             });
         }
@@ -2895,19 +2904,36 @@
                 // Determine which tiles to load
                 var tileX0 = lng2tile(minLng, zoom), tileX1 = lng2tile(maxLng, zoom);
                 var tileY0 = lat2tile(maxLat, zoom), tileY1 = lat2tile(minLat, zoom);
-                var tilePromises = [];
+                var reportSubdomains = ['a', 'b', 'c', 'd'];
+                var tileJobs = [];
                 for (var tx = tileX0; tx <= tileX1; tx++) {
                     for (var ty = tileY0; ty <= tileY1; ty++) {
-                        (function(tx, ty) {
-                            var url = 'https://a.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
-                            tilePromises.push(loadTileImage(url).then(function(img) {
-                                return { img: img, tx: tx, ty: ty };
-                            }));
-                        })(tx, ty);
+                        var sd = reportSubdomains[(tx + ty) % 4];
+                        tileJobs.push({ tx: tx, ty: ty, url: 'https://' + sd + '.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png' });
                     }
                 }
 
-                Promise.all(tilePromises).then(function(tiles) {
+                // Load tiles in batches of 6 to avoid overwhelming the server
+                function loadTileBatch(jobs, batchSize) {
+                    var results = [];
+                    var idx = 0;
+                    function nextBatch() {
+                        if (idx >= jobs.length) return Promise.resolve(results);
+                        var batch = jobs.slice(idx, idx + batchSize);
+                        idx += batchSize;
+                        return Promise.all(batch.map(function(job) {
+                            return loadTileImage(job.url).then(function(img) {
+                                return { img: img, tx: job.tx, ty: job.ty };
+                            });
+                        })).then(function(batchResults) {
+                            results = results.concat(batchResults);
+                            return nextBatch();
+                        });
+                    }
+                    return nextBatch();
+                }
+
+                loadTileBatch(tileJobs, 6).then(function(tiles) {
                     // Draw tiles with grayscale + enhanced contrast so roads are more visible
                     ctx.save();
                     ctx.filter = 'grayscale(1) contrast(1.15)';
@@ -7102,14 +7128,14 @@
 
                 if (totalTiles <= 0) { callback(); return; }
 
-                // Global timeout: if tiles haven't all loaded in 60s, proceed anyway
+                // Global timeout: if tiles haven't all loaded in 120s, proceed anyway
                 var globalTimeout = setTimeout(function() {
                     if (!callbackFired) {
                         console.warn('drawTiles: timeout globale raggiunto (' + loaded + '/' + totalTiles + ' tile caricate), proseguo...');
                         callbackFired = true;
                         callback();
                     }
-                }, 60000);
+                }, 120000);
 
                 // Build tile queue and load in batches
                 var tileQueue = [];
@@ -7121,8 +7147,8 @@
                     }
                 }
 
-                var MAX_CONCURRENT = 8;
-                var MAX_RETRIES = 2;
+                var MAX_CONCURRENT = 6;
+                var MAX_RETRIES = 3;
                 var queueIdx = 0;
                 var active = 0;
 
