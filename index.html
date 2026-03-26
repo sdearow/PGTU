@@ -1377,11 +1377,13 @@
             wheelDebounceTime: 80
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
-            subdomains: 'abcd',
+        var osmTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
         }).addTo(map);
+
+        // Apply B&W + contrast filter to the tile pane for a stylized OSM look
+        map.getPane('tilePane').style.filter = 'grayscale(1) contrast(1.15) brightness(1.05)';
 
         // Custom pane for background layers (above tiles at 200, below overlays at 400)
         map.createPane('backgroundPane');
@@ -2907,7 +2909,9 @@
                 }
 
                 Promise.all(tilePromises).then(function(tiles) {
-                    // Draw tiles (CartoDB Positron is already light grayscale)
+                    // Draw tiles with enhanced contrast so roads are more visible
+                    ctx.save();
+                    ctx.filter = 'contrast(1.4) brightness(1.05)';
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -2918,6 +2922,7 @@
                         var dh = 256 * scaleF;
                         ctx.drawImage(t.img, dx, dy, dw, dh);
                     });
+                    ctx.restore();
 
                     // Draw municipio boundary
                     if (munGeom) {
@@ -7157,10 +7162,13 @@
                                 if (tileHandled) return;
                                 tileHandled = true;
                                 clearTimeout(tileTimeout);
-                                // CartoDB Positron is already light grayscale - draw directly
+                                // CartoDB Positron with enhanced contrast for more visible roads
                                 var dx = tile.tx * effTileSize - originX;
                                 var dy = tile.ty * effTileSize - originY;
+                                ctx.save();
+                                ctx.filter = 'contrast(1.4) brightness(1.05)';
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
+                                ctx.restore();
                                 loaded++; active--;
                                 finishIfDone();
                                 loadNextTile();
