@@ -7411,7 +7411,7 @@
                     var p2 = latLngToCanvasPt(sw.lat, ne.lng, z, 0, 0);
                     var w = Math.abs(p2.x - p1.x);
                     var h = Math.abs(p2.y - p1.y);
-                    if (w <= canvasW * 0.9 && h <= canvasH * 0.9) return z;
+                    if (w <= canvasW * 0.70 && h <= canvasH * 0.9) return z;
                 }
                 return 1;
             }
