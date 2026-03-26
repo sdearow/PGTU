@@ -7684,7 +7684,8 @@
             var MAX_CANVAS_AREA = 16384 * 16384; // ~268 megapixels
 
             // Export canvas to the selected output format (png, jpeg, pdf)
-            function exportCanvas(finalCanvas, filename, paperFormat, callback) {
+            // zipFiles: optional array; when provided, files are collected instead of downloaded
+            function exportCanvas(finalCanvas, filename, paperFormat, callback, zipFiles) {
                 var outputFmt = (document.getElementById('print-output-format') || {}).value || 'png';
 
                 // Guard against oversized canvases that crash toDataURL/toBlob
@@ -7695,6 +7696,24 @@
                         'Riduci il DPI o il formato carta e riprova.');
                     callback(false);
                     return;
+                }
+
+                // Helper: either download or collect for ZIP
+                function saveOrCollect(blob, fname) {
+                    if (zipFiles) {
+                        zipFiles.push({ name: fname, blob: blob });
+                        callback(true);
+                    } else {
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        a.href = url;
+                        a.download = fname;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        callback(true);
+                    }
                 }
 
                 if (outputFmt === 'jpeg') {
@@ -7708,15 +7727,7 @@
                             jpegDone = true;
                             clearTimeout(jpegTimeout);
                             if (!blob) { alert('Errore nella generazione JPEG. Riduci il DPI o il formato carta.'); callback(false); return; }
-                            var url = URL.createObjectURL(blob);
-                            var a = document.createElement('a');
-                            a.href = url;
-                            a.download = filename.replace(/\.png$/, '') + '.jpg';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                            callback(true);
+                            saveOrCollect(blob, filename.replace(/\.png$/, '') + '.jpg');
                         }, 'image/jpeg', 0.95);
                     } catch (err) {
                         console.error('Errore export JPEG:', err);
@@ -7737,8 +7748,14 @@
                             return;
                         }
                         pdf.addImage(imgData, 'JPEG', 0, 0, paper.w, paper.h);
-                        pdf.save(filename.replace(/\.png$/, '') + '.pdf');
-                        callback(true);
+                        if (zipFiles) {
+                            var pdfBlob = pdf.output('blob');
+                            zipFiles.push({ name: filename.replace(/\.png$/, '') + '.pdf', blob: pdfBlob });
+                            callback(true);
+                        } else {
+                            pdf.save(filename.replace(/\.png$/, '') + '.pdf');
+                            callback(true);
+                        }
                     } catch (err) {
                         console.error('Errore export PDF:', err);
                         alert('Errore nella generazione PDF: ' + err.message + '\nRiduci il DPI o il formato carta e riprova.');
@@ -7756,15 +7773,7 @@
                             pngDone = true;
                             clearTimeout(pngTimeout);
                             if (!blob) { alert('Errore nella generazione PNG. Riduci il DPI o il formato carta.'); callback(false); return; }
-                            var url = URL.createObjectURL(blob);
-                            var a = document.createElement('a');
-                            a.href = url;
-                            a.download = filename.replace(/\.png$/, '') + '.png';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                            callback(true);
+                            saveOrCollect(blob, filename.replace(/\.png$/, '') + '.png');
                         }, 'image/png');
                     } catch (err) {
                         console.error('Errore export PNG:', err);
@@ -7774,7 +7783,7 @@
                 }
             }
 
-            function generateImage(municipioNum, callback) {
+            function generateImage(municipioNum, callback, zipFiles) {
                 var layer = getMunicipioLayer(municipioNum);
                 if (!layer) { callback(null); return; }
 
@@ -7919,7 +7928,7 @@
                     drawLegend(ctx, legendItems, pixW, pixH, headerH);
 
                     var fname = 'PGTU_' + getMunicipioName(municipioNum).replace(/\s+/g, '_') + '_' + formatSel.toUpperCase();
-                    exportCanvas(finalCanvas, fname, formatSel, callback);
+                    exportCanvas(finalCanvas, fname, formatSel, callback, zipFiles);
                   } catch (err) {
                     console.error('Errore generazione municipio ' + municipioNum + ':', err);
                     alert('Errore nella generazione della mappa: ' + err.message);
@@ -8070,7 +8079,7 @@
                 }, 100);
             });
 
-            // Generate all municipi
+            // Generate all municipi – collect into ZIP and download once
             btnAll.addEventListener('click', function() {
                 var allMunicipi = [];
                 layerMunicipii.eachLayer(function(layer) {
@@ -8079,33 +8088,73 @@
                 });
                 allMunicipi.sort(function(a, b) { return parseInt(a) - parseInt(b); });
 
-                if (!confirm('Verranno generate ' + allMunicipi.length + ' immagini. Continuare?')) return;
+                if (!confirm('Verranno generate ' + allMunicipi.length + ' immagini in un file ZIP. Continuare?')) return;
 
                 progressDiv.style.display = 'block';
                 btnGenerate.disabled = true;
                 btnAll.disabled = true;
                 btnFull.disabled = true;
                 var idx = 0;
+                var zipFiles = [];
+
+                function finishZip() {
+                    progressText.textContent = 'Creazione file ZIP...';
+                    progressFill.style.width = '95%';
+
+                    function doCreateZip() {
+                        var zip = new JSZip();
+                        zipFiles.forEach(function(f) {
+                            zip.file(f.name, f.blob);
+                        });
+                        zip.generateAsync({ type: 'blob' }).then(function(blob) {
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'PGTU_Tutti_Municipi_' + new Date().toISOString().slice(0,10) + '.zip';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                            progressText.textContent = 'ZIP scaricato con ' + zipFiles.length + ' immagini!';
+                            progressFill.style.width = '100%';
+                            btnGenerate.disabled = false;
+                            btnAll.disabled = false;
+                            btnFull.disabled = false;
+                            setTimeout(function() { progressDiv.style.display = 'none'; progressFill.style.width = '0%'; }, 3000);
+                        });
+                    }
+
+                    if (typeof JSZip === 'undefined') {
+                        var script = document.createElement('script');
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                        script.onload = doCreateZip;
+                        script.onerror = function() {
+                            alert('Errore nel caricamento di JSZip. Le immagini non sono state salvate.');
+                            btnGenerate.disabled = false;
+                            btnAll.disabled = false;
+                            btnFull.disabled = false;
+                            progressDiv.style.display = 'none';
+                        };
+                        document.head.appendChild(script);
+                    } else {
+                        doCreateZip();
+                    }
+                }
 
                 function next() {
                     if (idx >= allMunicipi.length) {
-                        progressText.textContent = 'Tutte le immagini generate!';
-                        progressFill.style.width = '100%';
-                        btnGenerate.disabled = false;
-                        btnAll.disabled = false;
-                        btnFull.disabled = false;
-                        setTimeout(function() { progressDiv.style.display = 'none'; progressFill.style.width = '0%'; }, 3000);
+                        finishZip();
                         return;
                     }
                     var mun = allMunicipi[idx];
-                    var pct = Math.round((idx / allMunicipi.length) * 100);
+                    var pct = Math.round((idx / allMunicipi.length) * 90);
                     progressText.textContent = 'Generazione ' + (idx + 1) + '/' + allMunicipi.length + ' - ' + getMunicipioName(mun) + '...';
                     progressFill.style.width = pct + '%';
 
                     generateImage(mun, function() {
                         idx++;
                         setTimeout(next, 500);
-                    });
+                    }, zipFiles);
                 }
                 next();
             });
