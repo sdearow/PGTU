@@ -7191,7 +7191,7 @@
                                 var dx = tile.tx * effTileSize - originX;
                                 var dy = tile.ty * effTileSize - originY;
                                 ctx.save();
-                                ctx.filter = 'grayscale(1) contrast(1.15)';
+                                ctx.filter = 'contrast(1.3) brightness(0.95)';
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
                                 ctx.restore();
                                 loaded++; active--;
