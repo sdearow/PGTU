@@ -934,8 +934,7 @@
                     <input type="checkbox" id="toggle-piazze-larghi" checked>
                     <label for="toggle-piazze-larghi">Piazze, Larghi ecc. (Proposte)</label>
                 </div>
-                <div class="legend-block" id="legend-piazze-larghi">
-                    <div class="legend-item"><span class="legend-line-dashed" style="border-color:#006400"></span> Piazza / Largo (inserimento)</div>
+                <div class="legend-block" id="legend-piazze-larghi" style="display:none;">
                 </div>
                 <div class="layer-toggle" style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
                     <input type="checkbox" id="toggle-disconnessioni">
@@ -7468,7 +7467,6 @@
                     'pl-disc-class': { color: '#1565c0', label: 'Disconnessioni Classif.' },
                     'pl-disc-estrema': { color: '#b71c1c', label: 'Discontinuità Estreme' },
                     'pl-frammenti': { color: '#e67e22', label: 'Strade Frammentate' },
-                    'pl-piazze-larghi': { color: '#006400', label: 'Piazze, Larghi ecc.', dashed: true }
                 };
 
                 // All layer IDs in display order
@@ -7477,7 +7475,7 @@
                     'pl-extraurbane-altri', 'pl-extraurbane-cdr', 'pl-centri-abitati',
                     'pl-low-traffic', 'pl-high-traffic',
                     'pl-atac', 'pl-tpl3', 'pl-tpl5', 'pl-tpl5-no-pgtu', 'pl-pgtu-no-tpl5',
-                    'pl-proposte-elim', 'pl-proposte-ins', 'pl-piazze-larghi',
+                    'pl-proposte-elim', 'pl-proposte-ins',
                     'pl-disconnessioni', 'pl-disc-class', 'pl-disc-estrema', 'pl-frammenti'
                 ];
 
