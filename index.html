@@ -1196,6 +1196,7 @@
                     <div class="print-layer-item"><input type="checkbox" id="pl-pgtu-no-tpl5"><label for="pl-pgtu-no-tpl5">Annesso D non in TPL5</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-proposte-elim" checked><label for="pl-proposte-elim">Eliminazioni</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-proposte-ins" checked><label for="pl-proposte-ins">Aggiunte</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-piazze-larghi" checked><label for="pl-piazze-larghi">Piazze, Larghi ecc.</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-disconnessioni"><label for="pl-disconnessioni">Disconnessioni Grafo</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-disc-class"><label for="pl-disc-class">Disconnessioni Classif.</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-disc-estrema"><label for="pl-disc-estrema">Discontinuit&agrave; Estreme</label></div>
@@ -7007,7 +7008,8 @@
                 'pl-disconnessioni': { toggle: 'toggle-disconnessioni', layer: function() { return layerDisconnessioni; } },
                 'pl-disc-class': { toggle: 'toggle-disc-classificazione', layer: function() { return layerDiscClassificazione; } },
                 'pl-disc-estrema': { toggle: 'toggle-disc-estrema', layer: function() { return layerDiscEstrema; } },
-                'pl-frammenti': { toggle: 'toggle-frammenti', layer: function() { return layerFrammenti; } }
+                'pl-frammenti': { toggle: 'toggle-frammenti', layer: function() { return layerFrammenti; } },
+                'pl-piazze-larghi': { toggle: 'toggle-piazze-larghi', layer: function() { return layerPiazzeLarghi; } }
             };
 
             // Custom scale toggle
@@ -7354,7 +7356,7 @@
                     'pl-atac', 'pl-tpl3', 'pl-tpl5',
                     'pl-tpl5-no-pgtu', 'pl-pgtu-no-tpl5',
                     'pl-pgtu', 'pl-pgtu-black', 'pl-grafo2026',
-                    'pl-proposte-elim', 'pl-proposte-ins',
+                    'pl-proposte-elim', 'pl-proposte-ins', 'pl-piazze-larghi',
                     'pl-disconnessioni', 'pl-disc-class', 'pl-disc-estrema', 'pl-frammenti'
                 ];
 
@@ -7378,7 +7380,8 @@
                     'pl-disconnessioni': 2.2,
                     'pl-disc-class': 2.2,
                     'pl-disc-estrema': 2.2,
-                    'pl-frammenti': 2.0
+                    'pl-frammenti': 2.0,
+                    'pl-piazze-larghi': 2.5
                 };
 
                 drawOrder.forEach(function(id) {
@@ -7464,7 +7467,8 @@
                     'pl-disconnessioni': { color: '#c0392b', label: 'Disconnessioni Grafo' },
                     'pl-disc-class': { color: '#1565c0', label: 'Disconnessioni Classif.' },
                     'pl-disc-estrema': { color: '#b71c1c', label: 'Discontinuità Estreme' },
-                    'pl-frammenti': { color: '#e67e22', label: 'Strade Frammentate' }
+                    'pl-frammenti': { color: '#e67e22', label: 'Strade Frammentate' },
+                    'pl-piazze-larghi': { color: '#006400', label: 'Piazze, Larghi ecc.', dashed: true }
                 };
 
                 // All layer IDs in display order
@@ -7473,7 +7477,7 @@
                     'pl-extraurbane-altri', 'pl-extraurbane-cdr', 'pl-centri-abitati',
                     'pl-low-traffic', 'pl-high-traffic',
                     'pl-atac', 'pl-tpl3', 'pl-tpl5', 'pl-tpl5-no-pgtu', 'pl-pgtu-no-tpl5',
-                    'pl-proposte-elim', 'pl-proposte-ins',
+                    'pl-proposte-elim', 'pl-proposte-ins', 'pl-piazze-larghi',
                     'pl-disconnessioni', 'pl-disc-class', 'pl-disc-estrema', 'pl-frammenti'
                 ];
 
