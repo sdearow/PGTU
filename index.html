@@ -2899,7 +2899,7 @@
                 for (var tx = tileX0; tx <= tileX1; tx++) {
                     for (var ty = tileY0; ty <= tileY1; ty++) {
                         (function(tx, ty) {
-                            var url = 'https://tile.openstreetmap.org/' + zoom + '/' + tx + '/' + ty + '.png';
+                            var url = 'https://a.basemaps.cartocdn.com/light_all/' + zoom + '/' + tx + '/' + ty + '.png';
                             tilePromises.push(loadTileImage(url).then(function(img) {
                                 return { img: img, tx: tx, ty: ty };
                             }));
@@ -2910,7 +2910,7 @@
                 Promise.all(tilePromises).then(function(tiles) {
                     // Draw tiles with grayscale + enhanced contrast so roads are more visible
                     ctx.save();
-                    ctx.filter = 'grayscale(1) contrast(1.15) brightness(1.05)';
+                    ctx.filter = 'grayscale(1) contrast(1.15)';
                     tiles.forEach(function(t) {
                         if (!t.img) return;
                         var tilePxX = t.tx * 256;
@@ -7127,7 +7127,7 @@
                 var active = 0;
 
                 function getTileUrl(s, z, x, y) {
-                    return 'https://tile.openstreetmap.org/' + z + '/' + x + '/' + y + '.png';
+                    return 'https://' + s + '.basemaps.cartocdn.com/light_all/' + z + '/' + x + '/' + y + '.png';
                 }
 
                 function loadNextTile() {
@@ -7165,7 +7165,7 @@
                                 var dx = tile.tx * effTileSize - originX;
                                 var dy = tile.ty * effTileSize - originY;
                                 ctx.save();
-                                ctx.filter = 'grayscale(1) contrast(1.15) brightness(1.05)';
+                                ctx.filter = 'grayscale(1) contrast(1.15)';
                                 ctx.drawImage(img, dx, dy, effTileSize, effTileSize);
                                 ctx.restore();
                                 loaded++; active--;
