@@ -1382,8 +1382,7 @@
             maxZoom: 19
         }).addTo(map);
 
-        // Apply B&W + contrast filter to the tile pane for a stylized OSM look
-        map.getPane('tilePane').style.filter = 'grayscale(1) contrast(1.15) brightness(1.05)';
+        // No filter on tile pane - show OSM tiles as-is
 
         // Custom pane for background layers (above tiles at 200, below overlays at 400)
         map.createPane('backgroundPane');
