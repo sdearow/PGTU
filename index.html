@@ -918,6 +918,14 @@
                         <button id="btn-grande-viab-export" class="edit-action-btn" style="font-size:11px;padding:4px 10px;margin:2px;background:#7B1FA2;color:white;">Esporta GeoJSON</button>
                     </div>
                 </div>
+                <div class="layer-toggle">
+                    <input type="checkbox" id="toggle-gv-gap">
+                    <label for="toggle-gv-gap" style="color:#E91E63;font-weight:600;">GV non coperta da Grafo 2026</label>
+                </div>
+                <div class="legend-block" id="legend-gv-gap" style="display:none;">
+                    <div class="legend-item"><span class="legend-line" style="background:#E91E63"></span> Non coperta (&lt;20%)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#FF9800"></span> Parzialmente coperta (20-80%)</div>
+                </div>
                 <div class="layer-toggle" style="margin-top:6px;border-top:1px solid #eee;padding-top:6px;">
                     <input type="checkbox" id="toggle-grafo2026">
                     <label for="toggle-grafo2026" style="font-weight:700;">PGTU - Grafo 2026</label>
@@ -1196,6 +1204,7 @@
                     <div class="print-layer-item"><input type="checkbox" id="pl-extraurbane-cdr"><label for="pl-extraurbane-cdr">Strade Extraurbane Comune di Roma</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-centri-abitati"><label for="pl-centri-abitati">Centri Abitati</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-grande-viabilita"><label for="pl-grande-viabilita">Grande Viabilit&agrave;</label></div>
+                    <div class="print-layer-item"><input type="checkbox" id="pl-gv-gap"><label for="pl-gv-gap">GV non coperta da Grafo 2026</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-grafo2026"><label for="pl-grafo2026">Grafo 2026</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-low-traffic"><label for="pl-low-traffic">Flussi Bassi</label></div>
                     <div class="print-layer-item"><input type="checkbox" id="pl-high-traffic"><label for="pl-high-traffic">Flussi Elevati</label></div>
@@ -1370,6 +1379,7 @@
 
     <!-- Grande Viabilità -->
     <script src="data_grande_viabilita.js"></script>
+    <script src="data_gv_gap.js"></script>
 
     <script>
     (function() {
@@ -1784,6 +1794,35 @@
                         var html = '<b style="color:#7B1FA2;">Grande Viabilit\u00e0</b>';
                         if (p.Name) html += '<br>Nome: ' + p.Name;
                         if (p.Layer) html += '<br>Layer: ' + p.Layer;
+                        layer.bindPopup(html);
+                    }
+                });
+            }
+        }
+
+        // GV Gap layer: segmenti Grande Viabilità non coperti/parzialmente coperti dal Grafo 2026
+        var layerGVGap = null;
+        var gvGapLoaded = false;
+        function ensureGVGapLayer() {
+            if (gvGapLoaded) return;
+            gvGapLoaded = true;
+            if (typeof json_GVGap !== 'undefined') {
+                layerGVGap = L.geoJSON(json_GVGap, {
+                    style: function(feature) {
+                        var tipo = feature.properties.tipo;
+                        if (tipo === 'non_coperto') {
+                            return { color: '#E91E63', weight: 4, opacity: 0.9 };
+                        } else {
+                            return { color: '#FF9800', weight: 3, opacity: 0.8 };
+                        }
+                    },
+                    onEachFeature: function(feature, layer) {
+                        var p = feature.properties;
+                        var tipo = p.tipo === 'non_coperto' ? 'Non coperta' : 'Parzialmente coperta';
+                        var color = p.tipo === 'non_coperto' ? '#E91E63' : '#FF9800';
+                        var html = '<b style="color:' + color + ';">GV ' + tipo + '</b>';
+                        html += '<br>Copertura: ' + (p.coverage_pct != null ? p.coverage_pct.toFixed(0) + '%' : 'n/a');
+                        html += '<br>Lunghezza: ' + (p.length_m != null ? (p.length_m / 1000).toFixed(2) + ' km' : 'n/a');
                         layer.bindPopup(html);
                     }
                 });
@@ -4746,6 +4785,7 @@
             if (typeof layerTPL5 !== 'undefined' && layerTPL5) cloneIntersecting(layerTPL5);
             if (typeof layerGrafo2026 !== 'undefined') cloneIntersecting(layerGrafo2026);
             if (typeof layerGrandeViabilita !== 'undefined' && layerGrandeViabilita) cloneIntersecting(layerGrandeViabilita);
+            if (typeof layerGVGap !== 'undefined' && layerGVGap) cloneIntersecting(layerGVGap);
             if (typeof layerDisconnessioni !== 'undefined') cloneIntersecting(layerDisconnessioni);
             if (typeof layerDiscClassificazione !== 'undefined') cloneIntersecting(layerDiscClassificazione);
             if (typeof layerDiscEstrema !== 'undefined') cloneIntersecting(layerDiscEstrema);
@@ -5225,6 +5265,17 @@
             } else {
                 if (layerGrandeViabilita) map.removeLayer(layerGrandeViabilita);
                 document.getElementById('legend-grande-viabilita').style.display = 'none';
+            }
+        });
+
+        document.getElementById('toggle-gv-gap').addEventListener('change', function() {
+            if (this.checked) {
+                ensureGVGapLayer();
+                if (layerGVGap) map.addLayer(layerGVGap);
+                document.getElementById('legend-gv-gap').style.display = '';
+            } else {
+                if (layerGVGap) map.removeLayer(layerGVGap);
+                document.getElementById('legend-gv-gap').style.display = 'none';
             }
         });
 
@@ -7059,6 +7110,7 @@
                 'pl-extraurbane-cdr': { toggle: 'toggle-extraurbane-cdr', layer: function() { ensureExtraurbaneLayer(); return layerExtraurbane; } },
                 'pl-centri-abitati': { toggle: 'toggle-centri-abitati', layer: function() { return layerCentriAbitati; } },
                 'pl-grande-viabilita': { toggle: 'toggle-grande-viabilita', layer: function() { ensureGrandeViabilitaLayer(); return layerGrandeViabilita; } },
+                'pl-gv-gap': { toggle: 'toggle-gv-gap', layer: function() { ensureGVGapLayer(); return layerGVGap; } },
                 'pl-grafo2026': { toggle: 'toggle-grafo2026', layer: function() {
                     // Ensure Grafo 2026 is populated even if not active on live map
                     if (!grafo2026Active) { renderGrafo2026(); }
@@ -7419,7 +7471,7 @@
             function drawLayers(ctx, zoom, originX, originY, filterBBox) {
                 // Define drawing order
                 var drawOrder = [
-                    'pl-centri-abitati', 'pl-grande-viabilita', 'pl-low-traffic', 'pl-high-traffic',
+                    'pl-centri-abitati', 'pl-grande-viabilita', 'pl-gv-gap', 'pl-low-traffic', 'pl-high-traffic',
                     'pl-extraurbane-altri', 'pl-extraurbane-cdr',
                     'pl-atac', 'pl-tpl3', 'pl-tpl5',
                     'pl-tpl5-no-pgtu', 'pl-pgtu-no-tpl5',
@@ -7439,6 +7491,7 @@
                     'pl-extraurbane-cdr': 2.0,
                     'pl-centri-abitati': 1.8,
                     'pl-grande-viabilita': 2.2,
+                    'pl-gv-gap': 2.5,
                     'pl-low-traffic': 2.0,
                     'pl-high-traffic': 2.0,
                     'pl-atac': 2.0,
@@ -7525,6 +7578,7 @@
                     'pl-extraurbane-cdr': { color: '#8B4513', label: 'Extraurbane Roma Capitale' },
                     'pl-centri-abitati': { color: '#ff9800', label: 'Centri Abitati' },
                     'pl-grande-viabilita': { color: '#7B1FA2', label: 'Grande Viabilità' },
+                    'pl-gv-gap': { color: '#E91E63', label: 'GV non coperta da Grafo 2026' },
                     'pl-low-traffic': { color: '#27ae60', label: 'Flussi Bassi' },
                     'pl-high-traffic': { color: '#e74c3c', label: 'Flussi Elevati' },
                     'pl-atac': { color: '#9b59b6', label: 'Linee ATAC' },
@@ -7544,7 +7598,7 @@
                 var allIds = [
                     'pl-pgtu', 'pl-pgtu-black', 'pl-grafo2026',
                     'pl-extraurbane-altri', 'pl-extraurbane-cdr', 'pl-centri-abitati',
-                    'pl-grande-viabilita',
+                    'pl-grande-viabilita', 'pl-gv-gap',
                     'pl-low-traffic', 'pl-high-traffic',
                     'pl-atac', 'pl-tpl3', 'pl-tpl5', 'pl-tpl5-no-pgtu', 'pl-pgtu-no-tpl5',
                     'pl-proposte-elim', 'pl-proposte-ins',
