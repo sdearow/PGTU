@@ -1856,6 +1856,7 @@
                 badge.textContent = total + ' segmenti' + (gvGapDeleteCount > 0 ? ' (' + gvGapDeleteCount + ' eliminati in sessione)' : '');
             }
         }
+        window.deleteGVGapSegment = deleteGVGapSegment;
         function deleteGVGapSegment(btnEl) {
             // Find the Leaflet layer that owns this popup
             var targetFeature = null;
