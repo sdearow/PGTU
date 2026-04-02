@@ -924,7 +924,7 @@
                 </div>
                 <div class="legend-block" id="legend-gv-gap" style="display:none;">
                     <div class="legend-item"><span class="legend-line" style="background:#E91E63"></span> Non coperta (&lt;20%)</div>
-                    <div class="legend-item"><span class="legend-line" style="background:#FF9800"></span> Parzialmente coperta (20-80%)</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#F48FB1"></span> Parzialmente coperta (20-80%)</div>
                     <div style="margin-top:4px;font-size:11px;color:#666;">
                         <em>Clicca un segmento per eliminarlo definitivamente. </em>
                         <div id="gv-gap-delete-count" style="color:#c0392b;font-weight:600;margin-top:2px;"></div>
@@ -1829,13 +1829,13 @@
                     if (tipo === 'non_coperto') {
                         return { color: '#E91E63', weight: 4, opacity: 0.9 };
                     } else {
-                        return { color: '#FF9800', weight: 3, opacity: 0.8 };
+                        return { color: '#F48FB1', weight: 3, opacity: 0.8 };
                     }
                 },
                 onEachFeature: function(feature, layer) {
                     var p = feature.properties;
                     var tipo = p.tipo === 'non_coperto' ? 'Non coperta' : 'Parzialmente coperta';
-                    var color = p.tipo === 'non_coperto' ? '#E91E63' : '#FF9800';
+                    var color = p.tipo === 'non_coperto' ? '#E91E63' : '#F48FB1';
                     var html = '<b style="color:' + color + ';">GV ' + tipo + '</b>';
                     html += '<br>Copertura: ' + (p.coverage_pct != null ? p.coverage_pct.toFixed(0) + '%' : 'n/a');
                     html += '<br>Lunghezza: ' + (p.length_m != null ? (p.length_m / 1000).toFixed(2) + ' km' : 'n/a');
